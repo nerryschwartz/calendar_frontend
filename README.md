@@ -26,14 +26,18 @@ Open `http://localhost:5173`.
 
 ## Routes
 
-| Path | View |
-|---|---|
-| `/calendars` | Task + free-time calendar |
-| `/calendars/blocks` | Block calendar |
-| `/plan-tree` | Master plan root |
-| `/plan-tree/:planId` | Plan node detail |
-| `/timers` | Active timers |
-| `/notifications` | Notification queue |
+| Path                 | View                                                  |
+| -------------------- | ----------------------------------------------------- |
+| `/calendars`         | Task + free-time calendar with refresh results        |
+| `/calendars/blocks`  | Block calendar                                        |
+| `/plan-tree`         | Master plan root with full detail panels              |
+| `/plan-tree/:planId` | Plan node detail, edit mode, constraints, repetitions |
+| `/timers`            | Active timers with countdown and completion feedback  |
+| `/notifications`     | Notification queue                                    |
+| `/free-time`         | Free-time activity management                         |
+| `/settings`          | App settings (timezone, solver, horizon)              |
+
+The header shows schedule health (active run ID, last failure) and a global plan search.
 
 ## Scripts
 

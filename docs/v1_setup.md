@@ -55,14 +55,14 @@ src/
 
 ## Routes (v1)
 
-| Path | View |
-|---|---|
-| `/calendars` | Task + free-time calendar |
-| `/calendars/blocks` | Block calendar |
-| `/plan-tree` | Master plan root |
-| `/plan-tree/:planId` | Plan node detail |
-| `/timers` | Active timers |
-| `/notifications` | Notification queue |
+| Path                 | View                      |
+| -------------------- | ------------------------- |
+| `/calendars`         | Task + free-time calendar |
+| `/calendars/blocks`  | Block calendar            |
+| `/plan-tree`         | Master plan root          |
+| `/plan-tree/:planId` | Plan node detail          |
+| `/timers`            | Active timers             |
+| `/notifications`     | Notification queue        |
 
 ## API client sketch
 

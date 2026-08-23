@@ -20,6 +20,9 @@ dist-ssr
 # Test coverage
 coverage
 
+# Local branch-loop plan artifacts
+.codex/plans/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

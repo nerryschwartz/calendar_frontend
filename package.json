@@ -9,7 +9,9 @@
     "format": "prettier --write .",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:default": "vitest run --testNamePattern='^(?!.*\\\\[(slow|failure_expected)\\\\]).*$'",
+    "test:timed": "vitest run --reporter=verbose"
   },
   "dependencies": {
     "react": "^19.2.8",

@@ -36,6 +36,38 @@ describe("usePlanEditMode", () => {
     refreshScheduleMock.mockResolvedValue(refreshResult);
   });
 
+  it("queues non-critical goal child drafts without calling backend APIs", () => {
+    const { result } = renderHook(() => usePlanEditMode());
+
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({
+        type: "createChild",
+        parentId: "master-plan-id",
+        body: {
+          kind: "GOAL",
+          is_critical: false,
+          name: "Generic goal",
+        },
+      });
+    });
+
+    expect(result.current.draftEdits).toEqual([
+      {
+        type: "createChild",
+        parentId: "master-plan-id",
+        body: {
+          kind: "GOAL",
+          is_critical: false,
+          name: "Generic goal",
+        },
+      },
+    ]);
+    expect(applyDraftEditsMock).not.toHaveBeenCalled();
+    expect(validatePlansMock).not.toHaveBeenCalled();
+    expect(refreshScheduleMock).not.toHaveBeenCalled();
+  });
+
   it("saves non-critical goal child drafts before validation and refresh", async () => {
     const onSaved = vi.fn();
     const callOrder: string[] = [];

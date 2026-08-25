@@ -28,6 +28,16 @@ const refreshResult: RefreshScheduleResult = {
   free_time: null,
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("usePlanEditMode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,9 +46,42 @@ describe("usePlanEditMode", () => {
     refreshScheduleMock.mockResolvedValue(refreshResult);
   });
 
-  it("saves non-critical goal child drafts before validation and refresh", async () => {
+  it("queues non-critical goal child drafts without calling backend APIs", () => {
+    const { result } = renderHook(() => usePlanEditMode());
+
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({
+        type: "createChild",
+        parentId: "master-plan-id",
+        body: {
+          kind: "GOAL",
+          is_critical: false,
+          name: "Generic goal",
+        },
+      });
+    });
+
+    expect(result.current.draftEdits).toEqual([
+      {
+        type: "createChild",
+        parentId: "master-plan-id",
+        body: {
+          kind: "GOAL",
+          is_critical: false,
+          name: "Generic goal",
+        },
+      },
+    ]);
+    expect(applyDraftEditsMock).not.toHaveBeenCalled();
+    expect(validatePlansMock).not.toHaveBeenCalled();
+    expect(refreshScheduleMock).not.toHaveBeenCalled();
+  });
+
+  it("finishes saving non-critical goal child drafts before refresh resolves", async () => {
     const onSaved = vi.fn();
     const callOrder: string[] = [];
+    const refresh = deferred<RefreshScheduleResult>();
 
     applyDraftEditsMock.mockImplementation(async () => {
       callOrder.push("apply");
@@ -49,7 +92,7 @@ describe("usePlanEditMode", () => {
     });
     refreshScheduleMock.mockImplementation(async () => {
       callOrder.push("refresh");
-      return refreshResult;
+      return refresh.promise;
     });
 
     const { result } = renderHook(() => usePlanEditMode({ onSaved }));
@@ -88,9 +131,64 @@ describe("usePlanEditMode", () => {
       expect(result.current.editMode).toBe(false);
     });
     expect(result.current.draftEdits).toEqual([]);
+    expect(result.current.saving).toBe(false);
+    expect(result.current.refreshingSchedule).toBe(true);
     expect(onSaved).toHaveBeenCalledWith({
       editCount: 1,
-      refreshResult,
     });
+
+    await act(async () => {
+      refresh.resolve(refreshResult);
+      await refresh.promise;
+    });
+
+    await waitFor(() => {
+      expect(result.current.refreshingSchedule).toBe(false);
+    });
+    expect(result.current.refreshResult).toEqual(refreshResult);
+  });
+
+  it("keeps saved edits discarded when the separate refresh fails", async () => {
+    const refresh = deferred<RefreshScheduleResult>();
+    refreshScheduleMock.mockReturnValue(refresh.promise);
+
+    const { result } = renderHook(() => usePlanEditMode());
+
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({
+        type: "createChild",
+        parentId: "master-plan-id",
+        body: {
+          kind: "GOAL",
+          is_critical: false,
+          name: "Generic goal",
+        },
+      });
+    });
+
+    await act(async () => {
+      await result.current.saveEdits();
+    });
+
+    expect(result.current.editMode).toBe(false);
+    expect(result.current.draftEdits).toEqual([]);
+
+    await act(async () => {
+      refresh.reject(new Error("Refresh was too slow"));
+      await refresh.promise.catch(() => undefined);
+    });
+
+    await waitFor(() => {
+      expect(result.current.refreshingSchedule).toBe(false);
+    });
+    expect(result.current.editMode).toBe(false);
+    expect(result.current.draftEdits).toEqual([]);
+    expect(result.current.error?.errors[0]?.message).toBe(
+      "Refresh was too slow",
+    );
+    expect(result.current.successMessage).toBe(
+      "Saved 1 edit(s), but schedule refresh failed",
+    );
   });
 });

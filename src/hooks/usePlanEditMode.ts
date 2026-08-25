@@ -11,7 +11,7 @@ import {
 interface UsePlanEditModeOptions {
   onSaved?: (result: {
     editCount: number;
-    refreshResult: RefreshScheduleResult;
+    refreshResult?: RefreshScheduleResult;
   }) => void;
 }
 
@@ -19,6 +19,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   const [editMode, setEditMode] = useState(false);
   const [draftEdits, setDraftEdits] = useState<DraftEdit[]>([]);
   const [saving, setSaving] = useState(false);
+  const [refreshingSchedule, setRefreshingSchedule] = useState(false);
   const [error, setError] = useState<ApiErrorDetail | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [refreshResult, setRefreshResult] =
@@ -67,19 +68,49 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
+    setRefreshResult(null);
     try {
       const editCount = draftEdits.length;
       await applyDraftEdits(draftEdits);
       await validatePlans();
-      const result = await refreshSchedule();
-      setRefreshResult(result);
       clearDrafts();
       setEditMode(false);
       setConfirmExit(false);
-      setSuccessMessage(
-        `Saved ${editCount} edit(s), validated, and refreshed schedule`,
-      );
-      onSaved?.({ editCount, refreshResult: result });
+      setSuccessMessage(`Saved ${editCount} edit(s); refreshing schedule`);
+      onSaved?.({ editCount });
+
+      setRefreshingSchedule(true);
+      void refreshSchedule()
+        .then((result) => {
+          setRefreshResult(result);
+          setSuccessMessage(
+            `Saved ${editCount} edit(s), validated, and refreshed schedule`,
+          );
+        })
+        .catch((err: unknown) => {
+          setError(
+            isApiError(err)
+              ? err.detail
+              : {
+                  errors: [
+                    {
+                      code: "UNKNOWN",
+                      message:
+                        err instanceof Error
+                          ? err.message
+                          : "Schedule refresh failed",
+                      details: {},
+                    },
+                  ],
+                },
+          );
+          setSuccessMessage(
+            `Saved ${editCount} edit(s), but schedule refresh failed`,
+          );
+        })
+        .finally(() => {
+          setRefreshingSchedule(false);
+        });
     } catch (err) {
       if (isApiError(err)) {
         setError(err.detail);
@@ -107,6 +138,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     editMode,
     draftEdits,
     saving,
+    refreshingSchedule,
     error,
     successMessage,
     refreshResult,

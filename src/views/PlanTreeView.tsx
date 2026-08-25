@@ -58,6 +58,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
     editMode,
     draftEdits,
     saving,
+    refreshingSchedule,
     error,
     successMessage,
     refreshResult,
@@ -108,6 +109,9 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
   if (loadError || !plan)
     return <p className="error-text">{loadError ?? "Plan not found"}</p>;
 
+  const statusMessage =
+    successMessage ?? (refreshingSchedule ? "Refreshing schedule…" : null);
+
   return (
     <section className="view">
       <div className="view-header">
@@ -150,7 +154,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       </div>
 
       <StatusBanner
-        message={successMessage}
+        message={statusMessage}
         onDismiss={() => setSuccessMessage(null)}
       />
       <ErrorBanner detail={error} onDismiss={() => setError(null)} />

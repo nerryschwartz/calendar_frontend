@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getPlanDeletePreview,
   getMasterPlan,
@@ -29,6 +29,7 @@ interface PlanTreeViewProps {
 
 export default function PlanTreeView({ planId }: PlanTreeViewProps) {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [plan, setPlan] = useState<PlanDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -72,7 +73,22 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
     cancelExit,
     setError,
     setSuccessMessage,
-  } = usePlanEditMode({ onSaved: () => void loadPlan() });
+  } = usePlanEditMode({
+    onSaved: () => {
+      if (
+        plan &&
+        draftEdits.some(
+          (edit) => edit.type === "delete" && edit.planId === plan.plan_id,
+        )
+      ) {
+        const parent = plan.ancestry.at(-1);
+        navigate(parent ? `/plan-tree/${parent.plan_id}` : "/plan-tree");
+        return;
+      }
+
+      void loadPlan();
+    },
+  });
 
   useEffect(() => {
     void loadPlan();

@@ -1,15 +1,23 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyDraftEdits, validatePlans } from "../api/plans";
+import {
+  DraftEditApplyError,
+  applyDraftEdits,
+  validatePlans,
+} from "../api/plans";
 import { refreshSchedule } from "../api/schedule";
-import type { RefreshScheduleResult } from "../api/types";
+import { ApiError, type RefreshScheduleResult } from "../api/types";
 import { usePlanEditMode } from "./usePlanEditMode";
 
-vi.mock("../api/plans", () => ({
-  applyDraftEdits: vi.fn(),
-  validatePlans: vi.fn(),
-}));
+vi.mock("../api/plans", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/plans")>();
+  return {
+    ...actual,
+    applyDraftEdits: vi.fn(),
+    validatePlans: vi.fn(),
+  };
+});
 
 vi.mock("../api/schedule", () => ({
   refreshSchedule: vi.fn(),
@@ -41,7 +49,7 @@ function deferred<T>() {
 describe("usePlanEditMode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    applyDraftEditsMock.mockResolvedValue(undefined);
+    applyDraftEditsMock.mockImplementation(async (edits) => edits.length);
     validatePlansMock.mockResolvedValue({ status: "ok" });
     refreshScheduleMock.mockResolvedValue(refreshResult);
   });
@@ -85,6 +93,7 @@ describe("usePlanEditMode", () => {
 
     applyDraftEditsMock.mockImplementation(async () => {
       callOrder.push("apply");
+      return 1;
     });
     validatePlansMock.mockImplementation(async () => {
       callOrder.push("validate");
@@ -190,5 +199,77 @@ describe("usePlanEditMode", () => {
     expect(result.current.successMessage).toBe(
       "Saved 1 edit(s), but schedule refresh failed",
     );
+  });
+
+  it("clears a successful delete draft and exits edit mode when validation fails", async () => {
+    const validationError = new ApiError({
+      errors: [
+        {
+          code: "VALIDATION_FAILED",
+          message: "Plan graph is invalid",
+          details: {},
+        },
+      ],
+    });
+    validatePlansMock.mockRejectedValue(validationError);
+
+    const { result } = renderHook(() => usePlanEditMode());
+
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({ type: "delete", planId: "deleted-plan-id" });
+    });
+
+    await act(async () => {
+      await result.current.saveEdits();
+    });
+
+    expect(applyDraftEditsMock).toHaveBeenCalledWith([
+      { type: "delete", planId: "deleted-plan-id" },
+    ]);
+    expect(validatePlansMock).toHaveBeenCalledTimes(1);
+    expect(refreshScheduleMock).not.toHaveBeenCalled();
+    expect(result.current.editMode).toBe(false);
+    expect(result.current.draftEdits).toEqual([]);
+    expect(result.current.error).toBe(validationError.detail);
+  });
+
+  it("removes only applied draft edits when a later edit fails", async () => {
+    const failedEditError = new ApiError({
+      errors: [
+        {
+          code: "SAVE_FAILED",
+          message: "Second edit failed",
+          details: {},
+        },
+      ],
+    });
+    applyDraftEditsMock.mockRejectedValue(
+      new DraftEditApplyError(failedEditError, 1),
+    );
+
+    const { result } = renderHook(() => usePlanEditMode());
+
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({
+        type: "rename",
+        planId: "first-plan-id",
+        name: "Applied rename",
+      });
+      result.current.queueEdit({ type: "delete", planId: "second-plan-id" });
+    });
+
+    await act(async () => {
+      await result.current.saveEdits();
+    });
+
+    expect(validatePlansMock).not.toHaveBeenCalled();
+    expect(refreshScheduleMock).not.toHaveBeenCalled();
+    expect(result.current.editMode).toBe(true);
+    expect(result.current.draftEdits).toEqual([
+      { type: "delete", planId: "second-plan-id" },
+    ]);
+    expect(result.current.error).toBe(failedEditError.detail);
   });
 });

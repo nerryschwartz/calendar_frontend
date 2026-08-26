@@ -77,6 +77,24 @@ export function deletePlan(planId: string): Promise<{ status: string }> {
   return apiDelete<{ status: string }>(`/api/plans/${planId}`);
 }
 
+export class DraftEditApplyError extends Error {
+  appliedCount: number;
+  cause: unknown;
+
+  constructor(cause: unknown, appliedCount: number) {
+    super(cause instanceof Error ? cause.message : "Draft edit failed");
+    this.name = "DraftEditApplyError";
+    this.appliedCount = appliedCount;
+    this.cause = cause;
+  }
+}
+
+export function isDraftEditApplyError(
+  error: unknown,
+): error is DraftEditApplyError {
+  return error instanceof DraftEditApplyError;
+}
+
 export function getPlanDeletePreview(
   planId: string,
 ): Promise<DeletionPreviewDTO> {
@@ -135,52 +153,61 @@ export function reopenBlock(planId: string): Promise<BlockPlanDTO> {
   return apiPost<BlockPlanDTO>(`/api/plans/${planId}/block/reopen`);
 }
 
-export async function applyDraftEdits(edits: DraftEdit[]): Promise<void> {
+export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
+  let appliedCount = 0;
+
   for (const edit of edits) {
-    switch (edit.type) {
-      case "rename":
-        await renamePlan(edit.planId, edit.name);
-        break;
-      case "createChild":
-        await createChildPlan(edit.parentId, edit.body);
-        break;
-      case "move":
-        await movePlan(edit.planId, edit.position, edit.isCritical);
-        break;
-      case "addPrerequisite":
-        await addPrerequisite(edit.planId, edit.prerequisitePlanId);
-        break;
-      case "removePrerequisite":
-        await removePrerequisite(edit.planId, edit.prerequisitePlanId);
-        break;
-      case "delete":
-        await deletePlan(edit.planId);
-        break;
-      case "taskComplete":
-        await completeTask(edit.planId);
-        break;
-      case "taskReopen":
-        await reopenTask(edit.planId);
-        break;
-      case "blockComplete":
-        await completeBlock(edit.planId);
-        break;
-      case "blockReopen":
-        await reopenBlock(edit.planId);
-        break;
-      case "taskScheduling":
-        await updateTaskScheduling(edit.planId, edit.body);
-        break;
-      case "blockScheduling":
-        await updateBlockScheduling(edit.planId, edit.body);
-        break;
-      case "taskBlockFamilies":
-        if (edit.families.length === 0) {
-          await clearTaskBlockFamilies(edit.planId);
-        } else {
-          await setTaskBlockFamilies(edit.planId, edit.families);
-        }
-        break;
+    try {
+      switch (edit.type) {
+        case "rename":
+          await renamePlan(edit.planId, edit.name);
+          break;
+        case "createChild":
+          await createChildPlan(edit.parentId, edit.body);
+          break;
+        case "move":
+          await movePlan(edit.planId, edit.position, edit.isCritical);
+          break;
+        case "addPrerequisite":
+          await addPrerequisite(edit.planId, edit.prerequisitePlanId);
+          break;
+        case "removePrerequisite":
+          await removePrerequisite(edit.planId, edit.prerequisitePlanId);
+          break;
+        case "delete":
+          await deletePlan(edit.planId);
+          break;
+        case "taskComplete":
+          await completeTask(edit.planId);
+          break;
+        case "taskReopen":
+          await reopenTask(edit.planId);
+          break;
+        case "blockComplete":
+          await completeBlock(edit.planId);
+          break;
+        case "blockReopen":
+          await reopenBlock(edit.planId);
+          break;
+        case "taskScheduling":
+          await updateTaskScheduling(edit.planId, edit.body);
+          break;
+        case "blockScheduling":
+          await updateBlockScheduling(edit.planId, edit.body);
+          break;
+        case "taskBlockFamilies":
+          if (edit.families.length === 0) {
+            await clearTaskBlockFamilies(edit.planId);
+          } else {
+            await setTaskBlockFamilies(edit.planId, edit.families);
+          }
+          break;
+      }
+      appliedCount += 1;
+    } catch (err) {
+      throw new DraftEditApplyError(err, appliedCount);
     }
   }
+
+  return appliedCount;
 }

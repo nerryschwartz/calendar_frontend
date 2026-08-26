@@ -41,7 +41,7 @@ function deferred<T>() {
 describe("usePlanEditMode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    applyDraftEditsMock.mockResolvedValue(undefined);
+    applyDraftEditsMock.mockImplementation(async (edits) => edits.length);
     validatePlansMock.mockResolvedValue({ status: "ok" });
     refreshScheduleMock.mockResolvedValue(refreshResult);
   });
@@ -85,6 +85,7 @@ describe("usePlanEditMode", () => {
 
     applyDraftEditsMock.mockImplementation(async () => {
       callOrder.push("apply");
+      return 1;
     });
     validatePlansMock.mockImplementation(async () => {
       callOrder.push("validate");

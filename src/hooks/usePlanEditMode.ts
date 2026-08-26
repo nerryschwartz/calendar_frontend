@@ -1,5 +1,9 @@
 import { useCallback, useState } from "react";
-import { applyDraftEdits, validatePlans } from "../api/plans";
+import {
+  applyDraftEdits,
+  isDraftEditApplyError,
+  validatePlans,
+} from "../api/plans";
 import { refreshSchedule } from "../api/schedule";
 import {
   isApiError,
@@ -69,15 +73,17 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     setError(null);
     setSuccessMessage(null);
     setRefreshResult(null);
+    const toSave = draftEdits;
     try {
-      const editCount = draftEdits.length;
-      await applyDraftEdits(draftEdits);
-      await validatePlans();
+      const editCount = await applyDraftEdits(toSave);
       clearDrafts();
       setEditMode(false);
       setConfirmExit(false);
-      setSuccessMessage(`Saved ${editCount} edit(s); refreshing schedule`);
       onSaved?.({ editCount });
+      await validatePlans();
+      setEditMode(false);
+      setConfirmExit(false);
+      setSuccessMessage(`Saved ${editCount} edit(s); refreshing schedule`);
 
       setRefreshingSchedule(true);
       void refreshSchedule()
@@ -112,14 +118,24 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
           setRefreshingSchedule(false);
         });
     } catch (err) {
-      if (isApiError(err)) {
-        setError(err.detail);
+      const failedEditError =
+        isDraftEditApplyError(err) && err.cause ? err.cause : err;
+
+      if (isDraftEditApplyError(err)) {
+        setDraftEdits(toSave.slice(err.appliedCount));
+      }
+
+      if (isApiError(failedEditError)) {
+        setError(failedEditError.detail);
       } else {
         setError({
           errors: [
             {
               code: "UNKNOWN",
-              message: err instanceof Error ? err.message : "Save failed",
+              message:
+                failedEditError instanceof Error
+                  ? failedEditError.message
+                  : "Save failed",
               details: {},
             },
           ],

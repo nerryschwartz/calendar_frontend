@@ -18,9 +18,48 @@ const WEEK_DAYS: FreeTimeWeekStartDay[] = [
   "SUNDAY",
 ];
 
+const MINUTES_PER_HOUR = 60;
+const MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR;
+const MINUTES_PER_MONTH = 30 * MINUTES_PER_DAY;
+const MINUTES_PER_YEAR = 365 * MINUTES_PER_DAY;
+
+interface HorizonParts {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+}
+
+function splitHorizonDuration(totalMinutes: number): HorizonParts {
+  let remaining = Math.max(0, Math.floor(totalMinutes));
+  const years = Math.floor(remaining / MINUTES_PER_YEAR);
+  remaining -= years * MINUTES_PER_YEAR;
+  const months = Math.floor(remaining / MINUTES_PER_MONTH);
+  remaining -= months * MINUTES_PER_MONTH;
+  const days = Math.floor(remaining / MINUTES_PER_DAY);
+  remaining -= days * MINUTES_PER_DAY;
+  const hours = Math.floor(remaining / MINUTES_PER_HOUR);
+  remaining -= hours * MINUTES_PER_HOUR;
+  return { years, months, days, hours, minutes: remaining };
+}
+
+function combineHorizonParts(parts: HorizonParts): number {
+  return (
+    parts.years * MINUTES_PER_YEAR +
+    parts.months * MINUTES_PER_MONTH +
+    parts.days * MINUTES_PER_DAY +
+    parts.hours * MINUTES_PER_HOUR +
+    parts.minutes
+  );
+}
+
 export default function SettingsView() {
   const [settings, setSettings] = useState<AppSettingsDTO | null>(null);
   const [form, setForm] = useState<Partial<AppSettingsDTO>>({});
+  const [horizonParts, setHorizonParts] = useState<HorizonParts>(
+    splitHorizonDuration(0),
+  );
   const { run, loading, error, successMessage, clearFeedback } =
     useAsyncAction();
 
@@ -28,28 +67,41 @@ export default function SettingsView() {
     const data = await getSettings();
     setSettings(data);
     setForm(data);
+    setHorizonParts(splitHorizonDuration(data.master_horizon_duration_minutes));
   }, []);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  const updateHorizonPart = (part: keyof HorizonParts, value: string) => {
+    setHorizonParts((current) => ({
+      ...current,
+      [part]: Math.max(0, Number(value) || 0),
+    }));
+  };
+
   const handleSave = async () => {
-    const updated = await run(
-      () =>
-        updateSettings({
-          local_timezone: form.local_timezone,
-          master_horizon_duration_minutes: form.master_horizon_duration_minutes,
-          exact_solver_time_limit_seconds: form.exact_solver_time_limit_seconds,
-          exact_solver_model_size_limit: form.exact_solver_model_size_limit,
-          heuristic_enabled: form.heuristic_enabled,
-          free_time_week_start_day: form.free_time_week_start_day,
-        }),
-      "Settings saved",
-    );
+    const masterHorizonDurationMinutes = combineHorizonParts(horizonParts);
+    const updated = await run(async () => {
+      if (masterHorizonDurationMinutes <= 0) {
+        throw new Error("Master horizon must be greater than zero minutes");
+      }
+      return await updateSettings({
+        local_timezone: form.local_timezone,
+        master_horizon_duration_minutes: masterHorizonDurationMinutes,
+        exact_solver_time_limit_seconds: form.exact_solver_time_limit_seconds,
+        exact_solver_model_size_limit: form.exact_solver_model_size_limit,
+        heuristic_enabled: form.heuristic_enabled,
+        free_time_week_start_day: form.free_time_week_start_day,
+      });
+    }, "Settings saved");
     if (updated) {
       setSettings(updated);
       setForm(updated);
+      setHorizonParts(
+        splitHorizonDuration(updated.master_horizon_duration_minutes),
+      );
     }
   };
 
@@ -93,19 +145,54 @@ export default function SettingsView() {
               }
             />
           </label>
-          <label className="labeled-field">
-            Master horizon (minutes)
-            <input
-              type="number"
-              value={form.master_horizon_duration_minutes ?? 0}
-              onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
-                  master_horizon_duration_minutes: Number(e.target.value),
-                }))
-              }
-            />
-          </label>
+          <fieldset className="settings-fieldset">
+            <legend>Master horizon</legend>
+            <label className="labeled-field">
+              <span>Years</span>
+              <input
+                type="number"
+                min={0}
+                value={horizonParts.years}
+                onChange={(e) => updateHorizonPart("years", e.target.value)}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Months</span>
+              <input
+                type="number"
+                min={0}
+                value={horizonParts.months}
+                onChange={(e) => updateHorizonPart("months", e.target.value)}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Days</span>
+              <input
+                type="number"
+                min={0}
+                value={horizonParts.days}
+                onChange={(e) => updateHorizonPart("days", e.target.value)}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Hours</span>
+              <input
+                type="number"
+                min={0}
+                value={horizonParts.hours}
+                onChange={(e) => updateHorizonPart("hours", e.target.value)}
+              />
+            </label>
+            <label className="labeled-field">
+              <span>Minutes</span>
+              <input
+                type="number"
+                min={0}
+                value={horizonParts.minutes}
+                onChange={(e) => updateHorizonPart("minutes", e.target.value)}
+              />
+            </label>
+          </fieldset>
           <label className="labeled-field">
             Exact solver time limit (seconds)
             <input

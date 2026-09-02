@@ -69,6 +69,60 @@ export default function PlanEditControls({
     plan.block_detail?.block_family ?? "default",
   );
 
+  const resetCreateChildForm = () => {
+    setChildKind("GOAL");
+    setChildName("");
+    setChildCritical(false);
+    setChildDuration(30);
+    setChildBlockFamily("default");
+    setChildDivisible(false);
+    setChildMinChunk("");
+    setRepeatMode("MANUAL_COUNT");
+    setRepeatInterval(1440);
+    setManualCount(5);
+  };
+
+  const queueCreateChild = () => {
+    const trimmedName = childName.trim();
+    if (!trimmedName) return;
+
+    queueEdit({
+      type: "createChild",
+      parentId: plan.plan_id,
+      body: {
+        kind: childKind,
+        is_critical: childCritical,
+        name: trimmedName,
+        duration_minutes:
+          childKind !== "GOAL" && childKind !== "REPETITION"
+            ? childDuration
+            : undefined,
+        divisible:
+          childKind === "TASK" || childKind === "BLOCK"
+            ? childDivisible
+            : undefined,
+        minimum_chunk_size_minutes:
+          childKind === "TASK" || childKind === "BLOCK"
+            ? childMinChunk === ""
+              ? null
+              : Number(childMinChunk)
+            : undefined,
+        block_family: childKind === "BLOCK" ? childBlockFamily : undefined,
+        repeat_mode: childKind === "REPETITION" ? repeatMode : undefined,
+        repeat_interval_minutes:
+          childKind === "REPETITION" ? repeatInterval : undefined,
+        manual_count: childKind === "REPETITION" ? manualCount : undefined,
+        start_time:
+          childKind === "REPETITION" ? new Date().toISOString() : undefined,
+        template_type: childKind === "REPETITION" ? "TASK" : undefined,
+        template_name:
+          childKind === "REPETITION" ? `${trimmedName} template` : undefined,
+        template_duration_minutes: childKind === "REPETITION" ? 30 : undefined,
+      },
+    });
+    resetCreateChildForm();
+  };
+
   return (
     <div className="edit-panel">
       <h3>Edit controls</h3>
@@ -151,9 +205,7 @@ export default function PlanEditControls({
                 placeholder="Minutes"
                 value={childMinChunk}
                 onChange={(e) =>
-                  setChildMinChunk(
-                    e.target.value ? Number(e.target.value) : "",
-                  )
+                  setChildMinChunk(e.target.value ? Number(e.target.value) : "")
                 }
               />
             </LabeledField>
@@ -202,50 +254,7 @@ export default function PlanEditControls({
           type="button"
           className="btn-secondary"
           disabled={!childName.trim()}
-          onClick={() =>
-            queueEdit({
-              type: "createChild",
-              parentId: plan.plan_id,
-              body: {
-                kind: childKind,
-                is_critical: childCritical,
-                name: childName.trim(),
-                duration_minutes:
-                  childKind !== "GOAL" && childKind !== "REPETITION"
-                    ? childDuration
-                    : undefined,
-                divisible:
-                  childKind === "TASK" || childKind === "BLOCK"
-                    ? childDivisible
-                    : undefined,
-                minimum_chunk_size_minutes:
-                  childKind === "TASK" || childKind === "BLOCK"
-                    ? childMinChunk === ""
-                      ? null
-                      : Number(childMinChunk)
-                    : undefined,
-                block_family:
-                  childKind === "BLOCK" ? childBlockFamily : undefined,
-                repeat_mode:
-                  childKind === "REPETITION" ? repeatMode : undefined,
-                repeat_interval_minutes:
-                  childKind === "REPETITION" ? repeatInterval : undefined,
-                manual_count:
-                  childKind === "REPETITION" ? manualCount : undefined,
-                start_time:
-                  childKind === "REPETITION"
-                    ? new Date().toISOString()
-                    : undefined,
-                template_type: childKind === "REPETITION" ? "TASK" : undefined,
-                template_name:
-                  childKind === "REPETITION"
-                    ? `${childName.trim()} template`
-                    : undefined,
-                template_duration_minutes:
-                  childKind === "REPETITION" ? 30 : undefined,
-              },
-            })
-          }
+          onClick={queueCreateChild}
         >
           Queue create child
         </button>

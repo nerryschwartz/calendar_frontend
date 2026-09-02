@@ -24,8 +24,12 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route index element={<Navigate to="/calendars" replace />} />
-          <Route path="calendars" element={<CalendarsView />} />
+          <Route index element={<Navigate to="/calendars/tasks" replace />} />
+          <Route
+            path="calendars"
+            element={<Navigate to="/calendars/tasks" replace />}
+          />
+          <Route path="calendars/tasks" element={<CalendarsView />} />
           <Route path="calendars/blocks" element={<BlockCalendarView />} />
           <Route path="plan-tree" element={<PlanTreeView />} />
           <Route path="plan-tree/:planId" element={<PlanTreeDetailRoute />} />

@@ -280,6 +280,32 @@ a:hover {
   gap: 0.35rem;
 }
 
+.labeled-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: min(100%, 12rem);
+  max-width: 100%;
+}
+
+.settings-form label.labeled-field {
+  display: inline-flex;
+}
+
+.labeled-field span {
+  color: #4b5563;
+  font-size: 0.875rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.labeled-field input,
+.labeled-field select,
+.labeled-field .plan-search {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .settings-form input,
 .settings-form select {
   padding: 0.45rem 0.65rem;
@@ -477,6 +503,7 @@ button,
 .edit-panel input,
 .edit-panel select {
   padding: 0.35rem 0.5rem;
+  min-width: 0;
 }
 
 .dialog-backdrop {

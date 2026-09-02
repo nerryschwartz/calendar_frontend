@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   DraftEdit,
   PlanDetailDTO,
@@ -10,6 +10,21 @@ import PlanSearchInput from "../PlanSearchInput";
 interface PlanEditControlsProps {
   plan: PlanDetailDTO;
   queueEdit: (edit: DraftEdit) => void;
+}
+
+function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className="labeled-field">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
 }
 
 export default function PlanEditControls({
@@ -60,11 +75,13 @@ export default function PlanEditControls({
 
       <fieldset>
         <legend>Rename</legend>
-        <input
-          type="text"
-          value={renameValue}
-          onChange={(e) => setRenameValue(e.target.value)}
-        />
+        <LabeledField label="Name">
+          <input
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+          />
+        </LabeledField>
         <button
           type="button"
           className="btn-secondary"
@@ -82,21 +99,25 @@ export default function PlanEditControls({
 
       <fieldset>
         <legend>Create child</legend>
-        <select
-          value={childKind}
-          onChange={(e) => setChildKind(e.target.value as PlanKind)}
-        >
-          <option value="GOAL">GOAL</option>
-          <option value="TASK">TASK</option>
-          <option value="BLOCK">BLOCK</option>
-          <option value="REPETITION">REPETITION</option>
-        </select>
-        <input
-          type="text"
-          placeholder="Name"
-          value={childName}
-          onChange={(e) => setChildName(e.target.value)}
-        />
+        <LabeledField label="Kind">
+          <select
+            value={childKind}
+            onChange={(e) => setChildKind(e.target.value as PlanKind)}
+          >
+            <option value="GOAL">GOAL</option>
+            <option value="TASK">TASK</option>
+            <option value="BLOCK">BLOCK</option>
+            <option value="REPETITION">REPETITION</option>
+          </select>
+        </LabeledField>
+        <LabeledField label="Name">
+          <input
+            type="text"
+            placeholder="Child name"
+            value={childName}
+            onChange={(e) => setChildName(e.target.value)}
+          />
+        </LabeledField>
         <label className="checkbox-label">
           <input
             type="checkbox"
@@ -107,12 +128,14 @@ export default function PlanEditControls({
         </label>
         {(childKind === "TASK" || childKind === "BLOCK") && (
           <>
-            <input
-              type="number"
-              min={1}
-              value={childDuration}
-              onChange={(e) => setChildDuration(Number(e.target.value))}
-            />
+            <LabeledField label="Duration">
+              <input
+                type="number"
+                min={1}
+                value={childDuration}
+                onChange={(e) => setChildDuration(Number(e.target.value))}
+              />
+            </LabeledField>
             <label className="checkbox-label">
               <input
                 type="checkbox"
@@ -121,46 +144,58 @@ export default function PlanEditControls({
               />
               Divisible
             </label>
-            <input
-              type="number"
-              min={1}
-              placeholder="Min chunk"
-              value={childMinChunk}
-              onChange={(e) =>
-                setChildMinChunk(e.target.value ? Number(e.target.value) : "")
-              }
-            />
-            {childKind === "BLOCK" && (
+            <LabeledField label="Min chunk">
               <input
-                type="text"
-                placeholder="Block family"
-                value={childBlockFamily}
-                onChange={(e) => setChildBlockFamily(e.target.value)}
+                type="number"
+                min={1}
+                placeholder="Minutes"
+                value={childMinChunk}
+                onChange={(e) =>
+                  setChildMinChunk(
+                    e.target.value ? Number(e.target.value) : "",
+                  )
+                }
               />
+            </LabeledField>
+            {childKind === "BLOCK" && (
+              <LabeledField label="Block family">
+                <input
+                  type="text"
+                  placeholder="Family"
+                  value={childBlockFamily}
+                  onChange={(e) => setChildBlockFamily(e.target.value)}
+                />
+              </LabeledField>
             )}
           </>
         )}
         {childKind === "REPETITION" && (
           <>
-            <select
-              value={repeatMode}
-              onChange={(e) => setRepeatMode(e.target.value as RepeatMode)}
-            >
-              <option value="MANUAL_COUNT">MANUAL_COUNT</option>
-              <option value="DATE_RANGE">DATE_RANGE</option>
-            </select>
-            <input
-              type="number"
-              min={1}
-              value={repeatInterval}
-              onChange={(e) => setRepeatInterval(Number(e.target.value))}
-            />
-            <input
-              type="number"
-              min={1}
-              value={manualCount}
-              onChange={(e) => setManualCount(Number(e.target.value))}
-            />
+            <LabeledField label="Repeat mode">
+              <select
+                value={repeatMode}
+                onChange={(e) => setRepeatMode(e.target.value as RepeatMode)}
+              >
+                <option value="MANUAL_COUNT">MANUAL_COUNT</option>
+                <option value="DATE_RANGE">DATE_RANGE</option>
+              </select>
+            </LabeledField>
+            <LabeledField label="Interval">
+              <input
+                type="number"
+                min={1}
+                value={repeatInterval}
+                onChange={(e) => setRepeatInterval(Number(e.target.value))}
+              />
+            </LabeledField>
+            <LabeledField label="Manual count">
+              <input
+                type="number"
+                min={1}
+                value={manualCount}
+                onChange={(e) => setManualCount(Number(e.target.value))}
+              />
+            </LabeledField>
           </>
         )}
         <button
@@ -218,24 +253,28 @@ export default function PlanEditControls({
 
       <fieldset>
         <legend>Move</legend>
-        <input
-          type="number"
-          min={0}
-          value={movePosition}
-          onChange={(e) => setMovePosition(Number(e.target.value))}
-        />
-        <select
-          value={moveCritical === "" ? "" : moveCritical ? "true" : "false"}
-          onChange={(e) =>
-            setMoveCritical(
-              e.target.value === "" ? "" : e.target.value === "true",
-            )
-          }
-        >
-          <option value="">Keep critical unchanged</option>
-          <option value="true">Critical</option>
-          <option value="false">Not critical</option>
-        </select>
+        <LabeledField label="Position">
+          <input
+            type="number"
+            min={0}
+            value={movePosition}
+            onChange={(e) => setMovePosition(Number(e.target.value))}
+          />
+        </LabeledField>
+        <LabeledField label="Critical">
+          <select
+            value={moveCritical === "" ? "" : moveCritical ? "true" : "false"}
+            onChange={(e) =>
+              setMoveCritical(
+                e.target.value === "" ? "" : e.target.value === "true",
+              )
+            }
+          >
+            <option value="">Keep critical unchanged</option>
+            <option value="true">Critical</option>
+            <option value="false">Not critical</option>
+          </select>
+        </LabeledField>
         <button
           type="button"
           className="btn-secondary"
@@ -254,27 +293,32 @@ export default function PlanEditControls({
 
       <fieldset>
         <legend>Add prerequisite</legend>
-        <PlanSearchInput
-          placeholder="Search prerequisite plan…"
-          onSelect={(result) =>
-            queueEdit({
-              type: "addPrerequisite",
-              planId: plan.plan_id,
-              prerequisitePlanId: result.plan_id,
-            })
-          }
-        />
+        <div className="labeled-field">
+          <span>Prerequisite</span>
+          <PlanSearchInput
+            placeholder="Search prerequisite plan…"
+            onSelect={(result) =>
+              queueEdit({
+                type: "addPrerequisite",
+                planId: plan.plan_id,
+                prerequisitePlanId: result.plan_id,
+              })
+            }
+          />
+        </div>
       </fieldset>
 
       {plan.task_detail && (
         <fieldset>
           <legend>Task scheduling</legend>
-          <input
-            type="number"
-            min={1}
-            value={taskDuration}
-            onChange={(e) => setTaskDuration(Number(e.target.value))}
-          />
+          <LabeledField label="Duration">
+            <input
+              type="number"
+              min={1}
+              value={taskDuration}
+              onChange={(e) => setTaskDuration(Number(e.target.value))}
+            />
+          </LabeledField>
           <label className="checkbox-label">
             <input
               type="checkbox"
@@ -283,21 +327,25 @@ export default function PlanEditControls({
             />
             Divisible
           </label>
-          <input
-            type="number"
-            min={1}
-            placeholder="Min chunk"
-            value={taskMinChunk}
-            onChange={(e) =>
-              setTaskMinChunk(e.target.value ? Number(e.target.value) : "")
-            }
-          />
-          <input
-            type="text"
-            placeholder="Block families (comma-separated)"
-            value={taskFamilies}
-            onChange={(e) => setTaskFamilies(e.target.value)}
-          />
+          <LabeledField label="Min chunk">
+            <input
+              type="number"
+              min={1}
+              placeholder="Minutes"
+              value={taskMinChunk}
+              onChange={(e) =>
+                setTaskMinChunk(e.target.value ? Number(e.target.value) : "")
+              }
+            />
+          </LabeledField>
+          <LabeledField label="Block families">
+            <input
+              type="text"
+              placeholder="Comma-separated"
+              value={taskFamilies}
+              onChange={(e) => setTaskFamilies(e.target.value)}
+            />
+          </LabeledField>
           <button
             type="button"
             className="btn-secondary"
@@ -352,12 +400,14 @@ export default function PlanEditControls({
       {plan.block_detail && (
         <fieldset>
           <legend>Block scheduling</legend>
-          <input
-            type="number"
-            min={1}
-            value={blockDuration}
-            onChange={(e) => setBlockDuration(Number(e.target.value))}
-          />
+          <LabeledField label="Duration">
+            <input
+              type="number"
+              min={1}
+              value={blockDuration}
+              onChange={(e) => setBlockDuration(Number(e.target.value))}
+            />
+          </LabeledField>
           <label className="checkbox-label">
             <input
               type="checkbox"
@@ -366,20 +416,24 @@ export default function PlanEditControls({
             />
             Divisible
           </label>
-          <input
-            type="number"
-            min={1}
-            placeholder="Min chunk"
-            value={blockMinChunk}
-            onChange={(e) =>
-              setBlockMinChunk(e.target.value ? Number(e.target.value) : "")
-            }
-          />
-          <input
-            type="text"
-            value={blockFamily}
-            onChange={(e) => setBlockFamily(e.target.value)}
-          />
+          <LabeledField label="Min chunk">
+            <input
+              type="number"
+              min={1}
+              placeholder="Minutes"
+              value={blockMinChunk}
+              onChange={(e) =>
+                setBlockMinChunk(e.target.value ? Number(e.target.value) : "")
+              }
+            />
+          </LabeledField>
+          <LabeledField label="Block family">
+            <input
+              type="text"
+              value={blockFamily}
+              onChange={(e) => setBlockFamily(e.target.value)}
+            />
+          </LabeledField>
           <button
             type="button"
             className="btn-secondary"

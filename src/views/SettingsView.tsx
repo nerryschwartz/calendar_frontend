@@ -83,7 +83,7 @@ export default function SettingsView() {
           ]}
         />
         <div className="settings-form">
-          <label>
+          <label className="labeled-field">
             Local timezone
             <input
               type="text"
@@ -93,7 +93,7 @@ export default function SettingsView() {
               }
             />
           </label>
-          <label>
+          <label className="labeled-field">
             Master horizon (minutes)
             <input
               type="number"
@@ -106,7 +106,7 @@ export default function SettingsView() {
               }
             />
           </label>
-          <label>
+          <label className="labeled-field">
             Exact solver time limit (seconds)
             <input
               type="number"
@@ -119,7 +119,7 @@ export default function SettingsView() {
               }
             />
           </label>
-          <label>
+          <label className="labeled-field">
             Exact solver model size limit
             <input
               type="number"
@@ -142,7 +142,7 @@ export default function SettingsView() {
             />
             Heuristic enabled
           </label>
-          <label>
+          <label className="labeled-field">
             Free-time week start day
             <select
               value={form.free_time_week_start_day ?? "MONDAY"}

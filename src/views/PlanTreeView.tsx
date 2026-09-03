@@ -6,6 +6,7 @@ import {
   getPlanDetail,
 } from "../api/plans";
 import {
+  persistedPlanRef,
   isApiError,
   type DeletionPreviewDTO,
   type PlanDetailDTO,
@@ -78,7 +79,10 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       if (
         plan &&
         draftEdits.some(
-          (edit) => edit.type === "delete" && edit.planId === plan.plan_id,
+          (edit) =>
+            edit.type === "delete" &&
+            edit.planRef.kind === "persisted" &&
+            edit.planRef.planId === plan.plan_id,
         )
       ) {
         const parent = plan.ancestry.at(-1);
@@ -115,7 +119,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
 
   const confirmQueueDelete = () => {
     if (!plan) return;
-    queueEdit({ type: "delete", planId: plan.plan_id });
+    queueEdit({ type: "delete", planRef: persistedPlanRef(plan.plan_id) });
     setConfirmDelete(false);
     setDeletePreview(null);
     setSuccessMessage("Delete queued — save edits to apply");
@@ -203,7 +207,13 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
         onUpdated={() => void loadPlan()}
       />
 
-      {editMode && <PlanEditControls plan={plan} queueEdit={queueEdit} />}
+      {editMode && (
+        <PlanEditControls
+          plan={plan}
+          draftEdits={draftEdits}
+          queueEdit={queueEdit}
+        />
+      )}
 
       <div className="detail-panel">
         <h3>Children</h3>
@@ -248,8 +258,10 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
                     onClick={() =>
                       queueEdit({
                         type: "removePrerequisite",
-                        planId: plan.plan_id,
-                        prerequisitePlanId: prereq.prerequisite_plan_id,
+                        planRef: persistedPlanRef(plan.plan_id),
+                        prerequisitePlanRef: persistedPlanRef(
+                          prereq.prerequisite_plan_id,
+                        ),
                       })
                     }
                   >

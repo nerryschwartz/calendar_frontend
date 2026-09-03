@@ -13,7 +13,11 @@ import {
   getPlanDeletePreview,
   getPlanDetail,
 } from "../api/plans";
-import type { PlanDetailDTO } from "../api/types";
+import {
+  persistedPlanRef,
+  type PlanDetailDTO,
+  type RefreshScheduleResult,
+} from "../api/types";
 import { usePlanEditMode } from "../hooks/usePlanEditMode";
 import PlanTreeView from "./PlanTreeView";
 
@@ -73,7 +77,12 @@ function LocationProbe() {
 }
 
 describe("PlanTreeView delete save navigation", () => {
-  let onSaved: (() => void) | undefined;
+  let onSaved:
+    | ((result: {
+        editCount: number;
+        refreshResult?: RefreshScheduleResult;
+      }) => void)
+    | undefined;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -106,7 +115,9 @@ describe("PlanTreeView delete save navigation", () => {
       onSaved = options.onSaved;
       return {
         editMode: true,
-        draftEdits: [{ type: "delete", planId: "current-plan-id" }],
+        draftEdits: [
+          { type: "delete", planRef: persistedPlanRef("current-plan-id") },
+        ],
         saving: false,
         refreshingSchedule: false,
         error: null,
@@ -155,7 +166,7 @@ describe("PlanTreeView delete save navigation", () => {
     await screen.findByRole("heading", { name: "Current plan" });
 
     act(() => {
-      onSaved?.();
+      onSaved?.({ editCount: 1 });
     });
 
     await waitFor(() => {

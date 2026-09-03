@@ -5,7 +5,7 @@ import PlanSearchInput from "./PlanSearchInput";
 import ScheduleStatusBar from "./ScheduleStatusBar";
 
 const navItems = [
-  { to: "/calendars", label: "Calendars" },
+  { to: "/calendars/tasks", label: "Task & Free-Time Calendar" },
   { to: "/calendars/blocks", label: "Block Calendar" },
   { to: "/plan-tree", label: "Plan Tree" },
   { to: "/timers", label: "Timers" },

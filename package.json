@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:default": "vitest run --testNamePattern='^(?!.*\\\\[(slow|failure_expected)\\\\]).*$'",
+    "test:default": "vitest run --testNamePattern='^(?!.*\\[(slow|failure_expected)\\]).*$'",
     "test:timed": "vitest run --reporter=verbose"
   },
   "dependencies": {

@@ -39,7 +39,7 @@ describe("SettingsView", () => {
     );
   });
 
-  it("round-trips compound master horizon fields to total minutes", async () => {
+  it("[slow] round-trips compound master horizon fields to total minutes", async () => {
     const user = userEvent.setup();
     render(<SettingsView />);
 

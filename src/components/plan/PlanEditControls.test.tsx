@@ -35,7 +35,7 @@ function planDetail(): PlanDetailDTO {
 }
 
 describe("PlanEditControls", () => {
-  it("can queue a child under a pending child create", async () => {
+  it("[slow] can queue a child under a pending child create", async () => {
     const user = userEvent.setup();
     const queueEdit = vi.fn();
     const pendingParent: DraftEdit = {

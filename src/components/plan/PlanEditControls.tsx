@@ -1,14 +1,17 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type {
   DraftEdit,
+  PlanRef,
   PlanDetailDTO,
   PlanKind,
   RepeatMode,
 } from "../../api/types";
+import { draftPlanRef, persistedPlanRef } from "../../api/types";
 import PlanSearchInput from "../PlanSearchInput";
 
 interface PlanEditControlsProps {
   plan: PlanDetailDTO;
+  draftEdits: DraftEdit[];
   queueEdit: (edit: DraftEdit) => void;
 }
 
@@ -29,6 +32,7 @@ function LabeledField({
 
 export default function PlanEditControls({
   plan,
+  draftEdits,
   queueEdit,
 }: PlanEditControlsProps) {
   const [renameValue, setRenameValue] = useState(plan.name);
@@ -39,6 +43,9 @@ export default function PlanEditControls({
   const [childBlockFamily, setChildBlockFamily] = useState("default");
   const [childDivisible, setChildDivisible] = useState(false);
   const [childMinChunk, setChildMinChunk] = useState<number | "">("");
+  const [childParentKey, setChildParentKey] = useState(
+    planRefKey(persistedPlanRef(plan.plan_id)),
+  );
   const [repeatMode, setRepeatMode] = useState<RepeatMode>("MANUAL_COUNT");
   const [repeatInterval, setRepeatInterval] = useState(1440);
   const [manualCount, setManualCount] = useState(5);
@@ -68,6 +75,7 @@ export default function PlanEditControls({
   const [blockFamily, setBlockFamily] = useState(
     plan.block_detail?.block_family ?? "default",
   );
+  const nextCreateDraftNumber = useRef(1);
 
   const resetCreateChildForm = () => {
     setChildKind("GOAL");
@@ -85,10 +93,12 @@ export default function PlanEditControls({
   const queueCreateChild = () => {
     const trimmedName = childName.trim();
     if (!trimmedName) return;
+    const parentRef = planRefFromKey(childParentKey);
 
     queueEdit({
       type: "createChild",
-      parentId: plan.plan_id,
+      draftId: `draft-${plan.plan_id}-${nextCreateDraftNumber.current++}`,
+      parentRef,
       body: {
         kind: childKind,
         is_critical: childCritical,
@@ -123,6 +133,19 @@ export default function PlanEditControls({
     resetCreateChildForm();
   };
 
+  const parentOptions = [
+    {
+      key: planRefKey(persistedPlanRef(plan.plan_id)),
+      label: `${plan.name} (current plan)`,
+    },
+    ...draftEdits
+      .filter((edit) => edit.type === "createChild")
+      .map((edit) => ({
+        key: planRefKey(draftPlanRef(edit.draftId)),
+        label: `${edit.body.name} (pending ${edit.body.kind})`,
+      })),
+  ];
+
   return (
     <div className="edit-panel">
       <h3>Edit controls</h3>
@@ -142,7 +165,7 @@ export default function PlanEditControls({
           onClick={() =>
             queueEdit({
               type: "rename",
-              planId: plan.plan_id,
+              planRef: persistedPlanRef(plan.plan_id),
               name: renameValue,
             })
           }
@@ -153,6 +176,18 @@ export default function PlanEditControls({
 
       <fieldset>
         <legend>Create child</legend>
+        <LabeledField label="Parent">
+          <select
+            value={childParentKey}
+            onChange={(e) => setChildParentKey(e.target.value)}
+          >
+            {parentOptions.map((option) => (
+              <option key={option.key} value={option.key}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </LabeledField>
         <LabeledField label="Kind">
           <select
             value={childKind}
@@ -290,7 +325,7 @@ export default function PlanEditControls({
           onClick={() =>
             queueEdit({
               type: "move",
-              planId: plan.plan_id,
+              planRef: persistedPlanRef(plan.plan_id),
               position: movePosition,
               isCritical: moveCritical === "" ? undefined : moveCritical,
             })
@@ -309,8 +344,8 @@ export default function PlanEditControls({
             onSelect={(result) =>
               queueEdit({
                 type: "addPrerequisite",
-                planId: plan.plan_id,
-                prerequisitePlanId: result.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
+                prerequisitePlanRef: persistedPlanRef(result.plan_id),
               })
             }
           />
@@ -361,7 +396,7 @@ export default function PlanEditControls({
             onClick={() =>
               queueEdit({
                 type: "taskScheduling",
-                planId: plan.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
                 body: {
                   duration_minutes: taskDuration,
                   divisible: taskDivisible,
@@ -379,7 +414,7 @@ export default function PlanEditControls({
             onClick={() =>
               queueEdit({
                 type: "taskBlockFamilies",
-                planId: plan.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
                 families: taskFamilies
                   .split(",")
                   .map((s) => s.trim())
@@ -397,7 +432,7 @@ export default function PlanEditControls({
                 type: plan.task_detail!.user_completed
                   ? "taskReopen"
                   : "taskComplete",
-                planId: plan.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
               })
             }
           >
@@ -449,7 +484,7 @@ export default function PlanEditControls({
             onClick={() =>
               queueEdit({
                 type: "blockScheduling",
-                planId: plan.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
                 body: {
                   duration_minutes: blockDuration,
                   divisible: blockDivisible,
@@ -470,7 +505,7 @@ export default function PlanEditControls({
                 type: plan.block_detail!.user_completed
                   ? "blockReopen"
                   : "blockComplete",
-                planId: plan.plan_id,
+                planRef: persistedPlanRef(plan.plan_id),
               })
             }
           >
@@ -481,4 +516,16 @@ export default function PlanEditControls({
       )}
     </div>
   );
+}
+
+function planRefKey(ref: PlanRef): string {
+  return ref.kind === "persisted"
+    ? `persisted:${ref.planId}`
+    : `draft:${ref.draftId}`;
+}
+
+function planRefFromKey(key: string): PlanRef {
+  const [kind, id] = key.split(":", 2);
+  if (kind === "draft") return draftPlanRef(id);
+  return persistedPlanRef(id);
 }

@@ -13,7 +13,11 @@ import {
   getPlanDeletePreview,
   getPlanDetail,
 } from "../api/plans";
-import type { PlanDetailDTO, RefreshScheduleResult } from "../api/types";
+import {
+  persistedPlanRef,
+  type PlanDetailDTO,
+  type RefreshScheduleResult,
+} from "../api/types";
 import { usePlanEditMode } from "../hooks/usePlanEditMode";
 import PlanTreeView from "./PlanTreeView";
 
@@ -111,7 +115,9 @@ describe("PlanTreeView delete save navigation", () => {
       onSaved = options.onSaved;
       return {
         editMode: true,
-        draftEdits: [{ type: "delete", planId: "current-plan-id" }],
+        draftEdits: [
+          { type: "delete", planRef: persistedPlanRef("current-plan-id") },
+        ],
         saving: false,
         refreshingSchedule: false,
         error: null,

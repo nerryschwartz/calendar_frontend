@@ -357,20 +357,59 @@ export interface UserGroupBody {
   windows: UserWindowBody[];
 }
 
+export type PlanRef =
+  { kind: "persisted"; planId: string } | { kind: "draft"; draftId: string };
+
+export function persistedPlanRef(planId: string): PlanRef {
+  return { kind: "persisted", planId };
+}
+
+export function draftPlanRef(draftId: string): PlanRef {
+  return { kind: "draft", draftId };
+}
+
+export function summarizePlanRef(ref: PlanRef): string {
+  return ref.kind === "persisted" ? ref.planId : `draft ${ref.draftId}`;
+}
+
+export function planRefsEqual(left: PlanRef, right: PlanRef): boolean {
+  if (left.kind !== right.kind) return false;
+  if (left.kind === "persisted" && right.kind === "persisted") {
+    return left.planId === right.planId;
+  }
+  if (left.kind === "draft" && right.kind === "draft") {
+    return left.draftId === right.draftId;
+  }
+  return false;
+}
+
 export type DraftEdit =
-  | { type: "rename"; planId: string; name: string }
-  | { type: "createChild"; parentId: string; body: CreateChildBody }
-  | { type: "move"; planId: string; position: number; isCritical?: boolean }
-  | { type: "addPrerequisite"; planId: string; prerequisitePlanId: string }
-  | { type: "removePrerequisite"; planId: string; prerequisitePlanId: string }
-  | { type: "delete"; planId: string }
-  | { type: "taskComplete"; planId: string }
-  | { type: "taskReopen"; planId: string }
-  | { type: "blockComplete"; planId: string }
-  | { type: "blockReopen"; planId: string }
-  | { type: "taskScheduling"; planId: string; body: TaskSchedulingBody }
-  | { type: "blockScheduling"; planId: string; body: BlockSchedulingBody }
-  | { type: "taskBlockFamilies"; planId: string; families: string[] };
+  | { type: "rename"; planRef: PlanRef; name: string }
+  | {
+      type: "createChild";
+      draftId: string;
+      parentRef: PlanRef;
+      body: CreateChildBody;
+    }
+  | { type: "move"; planRef: PlanRef; position: number; isCritical?: boolean }
+  | {
+      type: "addPrerequisite";
+      planRef: PlanRef;
+      prerequisitePlanRef: PlanRef;
+    }
+  | {
+      type: "removePrerequisite";
+      planRef: PlanRef;
+      prerequisitePlanRef: PlanRef;
+    }
+  | { type: "delete"; planRef: PlanRef }
+  | { type: "taskComplete"; planRef: PlanRef }
+  | { type: "taskReopen"; planRef: PlanRef }
+  | { type: "blockComplete"; planRef: PlanRef }
+  | { type: "blockReopen"; planRef: PlanRef }
+  | { type: "taskScheduling"; planRef: PlanRef; body: TaskSchedulingBody }
+  | { type: "blockScheduling"; planRef: PlanRef; body: BlockSchedulingBody }
+  | { type: "taskBlockFamilies"; planRef: PlanRef; families: string[] };
 
 export interface DetailGridItem {
   label: string;
@@ -412,11 +451,11 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
     case "move":
       return `Move to position ${edit.position}${edit.isCritical != null ? ` (critical=${edit.isCritical})` : ""}`;
     case "addPrerequisite":
-      return `Add prerequisite ${edit.prerequisitePlanId}`;
+      return `Add prerequisite ${summarizePlanRef(edit.prerequisitePlanRef)}`;
     case "removePrerequisite":
-      return `Remove prerequisite ${edit.prerequisitePlanId}`;
+      return `Remove prerequisite ${summarizePlanRef(edit.prerequisitePlanRef)}`;
     case "delete":
-      return `Delete plan ${edit.planId}`;
+      return `Delete plan ${summarizePlanRef(edit.planRef)}`;
     case "taskComplete":
       return "Complete task";
     case "taskReopen":

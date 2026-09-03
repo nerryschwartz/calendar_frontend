@@ -5,6 +5,7 @@ import type {
   DeletionPreviewDTO,
   DraftEdit,
   MasterPlanResponse,
+  PlanRef,
   PlanDetailDTO,
   PlanSearchResultDTO,
   TaskPlanDTO,
@@ -40,8 +41,8 @@ export function renamePlan(
 export function createChildPlan(
   parentId: string,
   body: CreateChildBody,
-): Promise<unknown> {
-  return apiPost(`/api/plans/${parentId}/children`, body);
+): Promise<PlanDetailDTO> {
+  return apiPost<PlanDetailDTO>(`/api/plans/${parentId}/children`, body);
 }
 
 export function movePlan(
@@ -155,51 +156,80 @@ export function reopenBlock(planId: string): Promise<BlockPlanDTO> {
 
 export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
   let appliedCount = 0;
+  const draftPlanIds = new Map<string, string>();
+
+  const resolvePlanRef = (ref: PlanRef): string => {
+    if (ref.kind === "persisted") return ref.planId;
+    const planId = draftPlanIds.get(ref.draftId);
+    if (!planId) {
+      throw new Error(
+        `Draft plan ${ref.draftId} must be created earlier in the pending edit queue`,
+      );
+    }
+    return planId;
+  };
 
   for (const edit of edits) {
     try {
       switch (edit.type) {
         case "rename":
-          await renamePlan(edit.planId, edit.name);
+          await renamePlan(resolvePlanRef(edit.planRef), edit.name);
           break;
         case "createChild":
-          await createChildPlan(edit.parentId, edit.body);
+          draftPlanIds.set(
+            edit.draftId,
+            (await createChildPlan(resolvePlanRef(edit.parentRef), edit.body))
+              .plan_id,
+          );
           break;
         case "move":
-          await movePlan(edit.planId, edit.position, edit.isCritical);
+          await movePlan(
+            resolvePlanRef(edit.planRef),
+            edit.position,
+            edit.isCritical,
+          );
           break;
         case "addPrerequisite":
-          await addPrerequisite(edit.planId, edit.prerequisitePlanId);
+          await addPrerequisite(
+            resolvePlanRef(edit.planRef),
+            resolvePlanRef(edit.prerequisitePlanRef),
+          );
           break;
         case "removePrerequisite":
-          await removePrerequisite(edit.planId, edit.prerequisitePlanId);
+          await removePrerequisite(
+            resolvePlanRef(edit.planRef),
+            resolvePlanRef(edit.prerequisitePlanRef),
+          );
           break;
         case "delete":
-          await deletePlan(edit.planId);
+          await deletePlan(resolvePlanRef(edit.planRef));
           break;
         case "taskComplete":
-          await completeTask(edit.planId);
+          await completeTask(resolvePlanRef(edit.planRef));
           break;
         case "taskReopen":
-          await reopenTask(edit.planId);
+          await reopenTask(resolvePlanRef(edit.planRef));
           break;
         case "blockComplete":
-          await completeBlock(edit.planId);
+          await completeBlock(resolvePlanRef(edit.planRef));
           break;
         case "blockReopen":
-          await reopenBlock(edit.planId);
+          await reopenBlock(resolvePlanRef(edit.planRef));
           break;
         case "taskScheduling":
-          await updateTaskScheduling(edit.planId, edit.body);
+          await updateTaskScheduling(resolvePlanRef(edit.planRef), edit.body);
           break;
         case "blockScheduling":
-          await updateBlockScheduling(edit.planId, edit.body);
+          await updateBlockScheduling(resolvePlanRef(edit.planRef), edit.body);
           break;
         case "taskBlockFamilies":
           if (edit.families.length === 0) {
-            await clearTaskBlockFamilies(edit.planId);
+            await clearTaskBlockFamilies(resolvePlanRef(edit.planRef));
           } else {
-            await setTaskBlockFamilies(edit.planId, edit.families);
+            await setTaskBlockFamilies(
+              resolvePlanRef(edit.planRef),
+              edit.families,
+            );
           }
           break;
       }

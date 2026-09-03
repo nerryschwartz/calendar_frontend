@@ -7,7 +7,11 @@ import {
   validatePlans,
 } from "../api/plans";
 import { refreshSchedule } from "../api/schedule";
-import { ApiError, type RefreshScheduleResult } from "../api/types";
+import {
+  ApiError,
+  persistedPlanRef,
+  type RefreshScheduleResult,
+} from "../api/types";
 import { usePlanEditMode } from "./usePlanEditMode";
 
 vi.mock("../api/plans", async (importOriginal) => {
@@ -61,7 +65,8 @@ describe("usePlanEditMode", () => {
       result.current.enterEditMode();
       result.current.queueEdit({
         type: "createChild",
-        parentId: "master-plan-id",
+        draftId: "draft-goal",
+        parentRef: persistedPlanRef("master-plan-id"),
         body: {
           kind: "GOAL",
           is_critical: false,
@@ -73,7 +78,8 @@ describe("usePlanEditMode", () => {
     expect(result.current.draftEdits).toEqual([
       {
         type: "createChild",
-        parentId: "master-plan-id",
+        draftId: "draft-goal",
+        parentRef: persistedPlanRef("master-plan-id"),
         body: {
           kind: "GOAL",
           is_critical: false,
@@ -110,7 +116,8 @@ describe("usePlanEditMode", () => {
       result.current.enterEditMode();
       result.current.queueEdit({
         type: "createChild",
-        parentId: "master-plan-id",
+        draftId: "draft-goal",
+        parentRef: persistedPlanRef("master-plan-id"),
         body: {
           kind: "GOAL",
           is_critical: false,
@@ -126,7 +133,8 @@ describe("usePlanEditMode", () => {
     expect(applyDraftEditsMock).toHaveBeenCalledWith([
       {
         type: "createChild",
-        parentId: "master-plan-id",
+        draftId: "draft-goal",
+        parentRef: persistedPlanRef("master-plan-id"),
         body: {
           kind: "GOAL",
           is_critical: false,
@@ -167,7 +175,8 @@ describe("usePlanEditMode", () => {
       result.current.enterEditMode();
       result.current.queueEdit({
         type: "createChild",
-        parentId: "master-plan-id",
+        draftId: "draft-goal",
+        parentRef: persistedPlanRef("master-plan-id"),
         body: {
           kind: "GOAL",
           is_critical: false,
@@ -217,7 +226,10 @@ describe("usePlanEditMode", () => {
 
     act(() => {
       result.current.enterEditMode();
-      result.current.queueEdit({ type: "delete", planId: "deleted-plan-id" });
+      result.current.queueEdit({
+        type: "delete",
+        planRef: persistedPlanRef("deleted-plan-id"),
+      });
     });
 
     await act(async () => {
@@ -225,7 +237,7 @@ describe("usePlanEditMode", () => {
     });
 
     expect(applyDraftEditsMock).toHaveBeenCalledWith([
-      { type: "delete", planId: "deleted-plan-id" },
+      { type: "delete", planRef: persistedPlanRef("deleted-plan-id") },
     ]);
     expect(validatePlansMock).toHaveBeenCalledTimes(1);
     expect(refreshScheduleMock).not.toHaveBeenCalled();
@@ -254,10 +266,13 @@ describe("usePlanEditMode", () => {
       result.current.enterEditMode();
       result.current.queueEdit({
         type: "rename",
-        planId: "first-plan-id",
+        planRef: persistedPlanRef("first-plan-id"),
         name: "Applied rename",
       });
-      result.current.queueEdit({ type: "delete", planId: "second-plan-id" });
+      result.current.queueEdit({
+        type: "delete",
+        planRef: persistedPlanRef("second-plan-id"),
+      });
     });
 
     await act(async () => {
@@ -268,7 +283,7 @@ describe("usePlanEditMode", () => {
     expect(refreshScheduleMock).not.toHaveBeenCalled();
     expect(result.current.editMode).toBe(true);
     expect(result.current.draftEdits).toEqual([
-      { type: "delete", planId: "second-plan-id" },
+      { type: "delete", planRef: persistedPlanRef("second-plan-id") },
     ]);
     expect(result.current.error).toBe(failedEditError.detail);
   });

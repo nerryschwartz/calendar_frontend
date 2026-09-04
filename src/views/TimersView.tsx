@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { getScheduleState, getTaskCalendar } from "../api/schedule";
 import { completeTimer, getActiveTimers } from "../api/timers";
 import {
   isApiError,
   type ActiveTimerDTO,
   type ApiErrorDetail,
+  type CalendarEntryDTO,
+  type ScheduleStateDTO,
 } from "../api/types";
 import ErrorBanner from "../components/ErrorBanner";
 import LoadingButton from "../components/LoadingButton";
@@ -18,12 +21,30 @@ import {
 
 const POLL_INTERVAL_MS = 30_000;
 const TICK_INTERVAL_MS = 1_000;
+const NEARBY_ENTRY_LIMIT = 5;
+
+function nearbyCalendarEntries(entries: CalendarEntryDTO[], nowMs: number) {
+  return [...entries]
+    .sort(
+      (left, right) =>
+        Math.abs(new Date(left.start_time).getTime() - nowMs) -
+        Math.abs(new Date(right.start_time).getTime() - nowMs),
+    )
+    .slice(0, NEARBY_ENTRY_LIMIT);
+}
 
 export default function TimersView() {
   const [timers, setTimers] = useState<ActiveTimerDTO[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiErrorDetail | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(
+    null,
+  );
+  const [scheduleState, setScheduleState] = useState<ScheduleStateDTO | null>(
+    null,
+  );
+  const [nearbyEntries, setNearbyEntries] = useState<CalendarEntryDTO[]>([]);
   const [now, setNow] = useState(Date.now());
   const [completingKeys, setCompletingKeys] = useState<Set<string>>(new Set());
   const [notificationPermission, setNotificationPermission] = useState<
@@ -39,9 +60,40 @@ export default function TimersView() {
   }, []);
 
   const requestNotificationPermission = useCallback(async () => {
-    if ("Notification" in window && Notification.permission === "default") {
+    setNotificationMessage(null);
+    if (!("Notification" in window)) {
+      setNotificationPermission("unsupported");
+      setNotificationMessage("Browser notifications are not supported here.");
+      return;
+    }
+    if (!window.isSecureContext) {
+      setNotificationMessage(
+        "Browser notifications require HTTPS or localhost.",
+      );
+      return;
+    }
+    if (Notification.permission === "granted") {
+      setNotificationPermission("granted");
+      setNotificationMessage("Browser notifications are already enabled.");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setNotificationPermission("denied");
+      setNotificationMessage(
+        "Browser notifications are blocked in this browser.",
+      );
+      return;
+    }
+    try {
       const result = await Notification.requestPermission();
       setNotificationPermission(result);
+      setNotificationMessage(
+        result === "granted"
+          ? "Browser notifications enabled."
+          : "Browser notifications were not enabled.",
+      );
+    } catch {
+      setNotificationMessage("Browser notification permission request failed.");
     }
   }, []);
 
@@ -54,13 +106,32 @@ export default function TimersView() {
   }, []);
 
   const loadTimers = useCallback(async () => {
+    setLoading(true);
     setError(null);
+    setSuccessMessage(null);
     try {
-      const data = await getActiveTimers();
+      const [data, nextScheduleState, calendar] = await Promise.all([
+        getActiveTimers(),
+        getScheduleState(),
+        getTaskCalendar(),
+      ]);
       setTimers(data.timers);
+      setScheduleState(nextScheduleState);
+      setNearbyEntries(nearbyCalendarEntries(calendar.entries, Date.now()));
     } catch (err) {
       if (isApiError(err)) {
         setError(err.detail);
+      } else {
+        setError({
+          errors: [
+            {
+              code: "NETWORK_ERROR",
+              message:
+                err instanceof Error ? err.message : "Failed to load timers",
+              details: {},
+            },
+          ],
+        });
       }
     } finally {
       setLoading(false);
@@ -105,7 +176,6 @@ export default function TimersView() {
   );
 
   useEffect(() => {
-    void requestNotificationPermission();
     void loadTimers();
     const pollId = window.setInterval(
       () => void loadTimers(),
@@ -159,12 +229,72 @@ export default function TimersView() {
         message={successMessage}
         onDismiss={() => setSuccessMessage(null)}
       />
+      <StatusBanner
+        message={notificationMessage}
+        onDismiss={() => setNotificationMessage(null)}
+      />
       <ErrorBanner detail={error} onDismiss={() => setError(null)} />
 
       {loading && timers.length === 0 ? (
         <p className="muted">Loading timers…</p>
       ) : timers.length === 0 ? (
-        <p className="muted">No active timers.</p>
+        <div className="empty-state">
+          <p className="muted">No active timer right now.</p>
+          {scheduleState ? (
+            <dl className="detail-grid">
+              <div className="detail-grid-row">
+                <dt>Active run</dt>
+                <dd>{scheduleState.active_calendar_run_id ?? "none"}</dd>
+              </div>
+              <div className="detail-grid-row">
+                <dt>Schedule updated</dt>
+                <dd>{formatDateTime(scheduleState.updated_at)}</dd>
+              </div>
+              {scheduleState.last_refresh_failed && (
+                <div className="detail-grid-row">
+                  <dt>Last refresh</dt>
+                  <dd>
+                    Failed
+                    {scheduleState.last_failure_reason
+                      ? `: ${scheduleState.last_failure_reason}`
+                      : ""}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="muted">Schedule state is not available yet.</p>
+          )}
+          {nearbyEntries.length > 0 ? (
+            <>
+              <h3>Nearby calendar entries</h3>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Label</th>
+                    <th>Type</th>
+                    <th>Start</th>
+                    <th>End</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {nearbyEntries.slice(0, 5).map((entry) => (
+                    <tr key={entry.calendar_entry_id}>
+                      <td>{entry.display_label}</td>
+                      <td>
+                        <code>{entry.entry_type}</code>
+                      </td>
+                      <td>{formatDateTime(entry.start_time)}</td>
+                      <td>{formatDateTime(entry.end_time)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : (
+            <p className="muted">No calendar entries are available.</p>
+          )}
+        </div>
       ) : (
         <table className="data-table">
           <thead>

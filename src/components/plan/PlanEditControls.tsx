@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import type {
   DraftEdit,
   PlanRef,
@@ -8,26 +8,12 @@ import type {
 } from "../../api/types";
 import { draftPlanRef, persistedPlanRef } from "../../api/types";
 import PlanSearchInput from "../PlanSearchInput";
+import LabeledField from "../LabeledField";
 
 interface PlanEditControlsProps {
   plan: PlanDetailDTO;
   draftEdits: DraftEdit[];
   queueEdit: (edit: DraftEdit) => void;
-}
-
-function LabeledField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="labeled-field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
 }
 
 export default function PlanEditControls({
@@ -219,7 +205,8 @@ export default function PlanEditControls({
           <>
             <LabeledField label="Duration">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min={1}
                 value={childDuration}
                 onChange={(e) => setChildDuration(Number(e.target.value))}
@@ -235,7 +222,8 @@ export default function PlanEditControls({
             </label>
             <LabeledField label="Min chunk">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min={1}
                 placeholder="Minutes"
                 value={childMinChunk}
@@ -269,7 +257,8 @@ export default function PlanEditControls({
             </LabeledField>
             <LabeledField label="Interval">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min={1}
                 value={repeatInterval}
                 onChange={(e) => setRepeatInterval(Number(e.target.value))}
@@ -277,7 +266,8 @@ export default function PlanEditControls({
             </LabeledField>
             <LabeledField label="Manual count">
               <input
-                type="number"
+                type="text"
+                inputMode="numeric"
                 min={1}
                 value={manualCount}
                 onChange={(e) => setManualCount(Number(e.target.value))}
@@ -299,7 +289,8 @@ export default function PlanEditControls({
         <legend>Move</legend>
         <LabeledField label="Position">
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             min={0}
             value={movePosition}
             onChange={(e) => setMovePosition(Number(e.target.value))}
@@ -357,7 +348,8 @@ export default function PlanEditControls({
           <legend>Task scheduling</legend>
           <LabeledField label="Duration">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               min={1}
               value={taskDuration}
               onChange={(e) => setTaskDuration(Number(e.target.value))}
@@ -373,7 +365,8 @@ export default function PlanEditControls({
           </label>
           <LabeledField label="Min chunk">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               min={1}
               placeholder="Minutes"
               value={taskMinChunk}
@@ -446,7 +439,8 @@ export default function PlanEditControls({
           <legend>Block scheduling</legend>
           <LabeledField label="Duration">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               min={1}
               value={blockDuration}
               onChange={(e) => setBlockDuration(Number(e.target.value))}
@@ -462,7 +456,8 @@ export default function PlanEditControls({
           </label>
           <LabeledField label="Min chunk">
             <input
-              type="number"
+              type="text"
+              inputMode="numeric"
               min={1}
               placeholder="Minutes"
               value={blockMinChunk}

@@ -8,6 +8,7 @@ import {
 } from "../../api/constraints";
 import type { PlanDetailDTO, TimeConstraintGroupDTO } from "../../api/types";
 import LoadingButton from "../LoadingButton";
+import LabeledField from "../LabeledField";
 import StatusBanner from "../StatusBanner";
 import { useAsyncAction } from "../../hooks/useAsyncAction";
 import { formatDateTime, datetimeLocalToIso } from "../../utils/format";
@@ -160,16 +161,20 @@ export default function PlanConstraintsPanel({
       {editMode && (
         <fieldset>
           <legend>Add USER constraint group</legend>
-          <input
-            type="datetime-local"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-          />
-          <input
-            type="datetime-local"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-          />
+          <LabeledField label="Start">
+            <input
+              type="datetime-local"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+            />
+          </LabeledField>
+          <LabeledField label="End">
+            <input
+              type="datetime-local"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+            />
+          </LabeledField>
           <LoadingButton
             variant="secondary"
             onClick={() => void handleAddGroup()}

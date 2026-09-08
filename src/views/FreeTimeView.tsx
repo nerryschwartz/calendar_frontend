@@ -9,6 +9,7 @@ import {
   updateFreeTimeActivity,
 } from "../api/freeTime";
 import type { FreeTimeActivityDTO } from "../api/types";
+import LabeledField from "../components/LabeledField";
 import ErrorBanner from "../components/ErrorBanner";
 import LoadingButton from "../components/LoadingButton";
 import PlanSearchInput from "../components/PlanSearchInput";
@@ -94,28 +95,36 @@ export default function FreeTimeView() {
       <div className="detail-panel">
         <h3>Create activity</h3>
         <div className="settings-form">
-          <input
-            type="text"
-            placeholder="Name"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-          />
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            max="1"
-            placeholder="Real fraction"
-            value={newFraction}
-            onChange={(e) => setNewFraction(e.target.value)}
-          />
-          <input
-            type="number"
-            min="1"
-            placeholder="Min block (min)"
-            value={newMinBlock}
-            onChange={(e) => setNewMinBlock(Number(e.target.value))}
-          />
+          <LabeledField label="Name">
+            <input
+              type="text"
+              placeholder="Name"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+          </LabeledField>
+          <LabeledField label="Real fraction">
+            <input
+              type="text"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              max="1"
+              placeholder="Real fraction"
+              value={newFraction}
+              onChange={(e) => setNewFraction(e.target.value)}
+            />
+          </LabeledField>
+          <LabeledField label="Minimum block (min)">
+            <input
+              type="text"
+              inputMode="numeric"
+              min="1"
+              placeholder="Min block (min)"
+              value={newMinBlock}
+              onChange={(e) => setNewMinBlock(Number(e.target.value))}
+            />
+          </LabeledField>
           <LoadingButton
             disabled={!newName.trim()}
             onClick={() => void handleCreate()}
@@ -202,18 +211,22 @@ function ActivityCard({
         Block families: {activity.allowed_block_families.join(", ") || "none"}
       </p>
       <div className="settings-form">
-        <input value={name} onChange={(e) => setName(e.target.value)} />
+        <LabeledField label="Name">
+          <input value={name} onChange={(e) => setName(e.target.value)} />
+        </LabeledField>
         <LoadingButton variant="secondary" onClick={() => void saveName()}>
           Rename
         </LoadingButton>
         <LoadingButton variant="secondary" onClick={onToggle}>
           {activity.enabled ? "Disable" : "Enable"}
         </LoadingButton>
-        <input
-          value={families}
-          onChange={(e) => setFamilies(e.target.value)}
-          placeholder="Block families (comma-separated)"
-        />
+        <LabeledField label="Block families">
+          <input
+            value={families}
+            onChange={(e) => setFamilies(e.target.value)}
+            placeholder="Block families (comma-separated)"
+          />
+        </LabeledField>
         <LoadingButton
           variant="secondary"
           onClick={() => onUpdateFamilies(families)}

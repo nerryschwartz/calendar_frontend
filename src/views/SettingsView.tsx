@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getSettings, updateSettings } from "../api/settings";
 import type { AppSettingsDTO, FreeTimeWeekStartDay } from "../api/types";
+import LabeledField from "../components/LabeledField";
 import DetailGrid from "../components/DetailGrid";
 import ErrorBanner from "../components/ErrorBanner";
 import LoadingButton from "../components/LoadingButton";
@@ -181,8 +182,7 @@ export default function SettingsView() {
           ]}
         />
         <div className="settings-form">
-          <label className="labeled-field">
-            Local timezone
+          <LabeledField label="Local timezone">
             <select
               value={form.local_timezone ?? ""}
               onChange={(e) =>
@@ -195,11 +195,13 @@ export default function SettingsView() {
                 </option>
               ))}
             </select>
-          </label>
+          </LabeledField>
+          <p className="selected-timezone">
+            {timezoneLabel(form.local_timezone ?? "UTC")}
+          </p>
           <fieldset className="settings-fieldset">
             <legend>Master horizon</legend>
-            <label className="labeled-field">
-              <span>Years</span>
+            <LabeledField label="Years">
               <input
                 type="text"
                 inputMode="numeric"
@@ -207,9 +209,8 @@ export default function SettingsView() {
                 value={horizonParts.years}
                 onChange={(e) => updateHorizonPart("years", e.target.value)}
               />
-            </label>
-            <label className="labeled-field">
-              <span>Months</span>
+            </LabeledField>
+            <LabeledField label="Months">
               <input
                 type="text"
                 inputMode="numeric"
@@ -217,9 +218,8 @@ export default function SettingsView() {
                 value={horizonParts.months}
                 onChange={(e) => updateHorizonPart("months", e.target.value)}
               />
-            </label>
-            <label className="labeled-field">
-              <span>Days</span>
+            </LabeledField>
+            <LabeledField label="Days">
               <input
                 type="text"
                 inputMode="numeric"
@@ -227,9 +227,8 @@ export default function SettingsView() {
                 value={horizonParts.days}
                 onChange={(e) => updateHorizonPart("days", e.target.value)}
               />
-            </label>
-            <label className="labeled-field">
-              <span>Hours</span>
+            </LabeledField>
+            <LabeledField label="Hours">
               <input
                 type="text"
                 inputMode="numeric"
@@ -237,9 +236,8 @@ export default function SettingsView() {
                 value={horizonParts.hours}
                 onChange={(e) => updateHorizonPart("hours", e.target.value)}
               />
-            </label>
-            <label className="labeled-field">
-              <span>Minutes</span>
+            </LabeledField>
+            <LabeledField label="Minutes">
               <input
                 type="text"
                 inputMode="numeric"
@@ -247,26 +245,24 @@ export default function SettingsView() {
                 value={horizonParts.minutes}
                 onChange={(e) => updateHorizonPart("minutes", e.target.value)}
               />
-            </label>
+            </LabeledField>
           </fieldset>
-          <label className="labeled-field">
-            Exact solver time limit (seconds)
+          <LabeledField label="Exact solver time limit (seconds)">
             <input
               type="text"
               inputMode="decimal"
               value={timeLimit}
               onChange={(e) => setTimeLimit(e.target.value)}
             />
-          </label>
-          <label className="labeled-field">
-            Exact solver model size limit
+          </LabeledField>
+          <LabeledField label="Exact solver model size limit">
             <input
               type="text"
               inputMode="numeric"
               value={sizeLimit}
               onChange={(e) => setSizeLimit(e.target.value)}
             />
-          </label>
+          </LabeledField>
           <label className="checkbox-label">
             <input
               type="checkbox"
@@ -277,8 +273,7 @@ export default function SettingsView() {
             />
             Heuristic enabled
           </label>
-          <label className="labeled-field">
-            Free-time week start day
+          <LabeledField label="Free-time week start day">
             <select
               value={form.free_time_week_start_day ?? "MONDAY"}
               onChange={(e) =>
@@ -295,7 +290,7 @@ export default function SettingsView() {
                 </option>
               ))}
             </select>
-          </label>
+          </LabeledField>
         </div>
       </div>
     </section>

@@ -15,7 +15,45 @@ async function parseError(response: Response): Promise<never> {
   }
 
   if (body && typeof body === "object" && "detail" in body) {
-    throw new ApiError((body as { detail: ApiErrorDetail }).detail);
+    const detail = body.detail;
+    if (Array.isArray(detail)) {
+      throw new ApiError({
+        errors: detail.map((issue: unknown) => {
+          const item =
+            issue && typeof issue === "object"
+              ? (issue as Record<string, unknown>)
+              : {};
+          const location = Array.isArray(item.loc) ? item.loc.join(".") : "";
+          const message =
+            typeof item.msg === "string" ? item.msg : "Invalid value";
+          return {
+            code:
+              typeof item.type === "string" ? item.type : "VALIDATION_ERROR",
+            message: location ? `${location}: ${message}` : message,
+            details: {},
+          };
+        }),
+      });
+    }
+    if (
+      detail &&
+      typeof detail === "object" &&
+      "errors" in detail &&
+      Array.isArray(detail.errors) &&
+      detail.errors.every(
+        (error) =>
+          error &&
+          typeof error === "object" &&
+          typeof error.message === "string",
+      )
+    ) {
+      throw new ApiError(detail as ApiErrorDetail);
+    }
+    if (typeof detail === "string") {
+      throw new ApiError({
+        errors: [{ code: "HTTP_ERROR", message: detail, details: {} }],
+      });
+    }
   }
 
   throw new ApiError({

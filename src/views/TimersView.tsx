@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { getScheduleState, getTaskCalendar } from "../api/schedule";
 import { completeTimer, getActiveTimers } from "../api/timers";
 import {
   isApiError,
@@ -21,17 +20,6 @@ import {
 
 const POLL_INTERVAL_MS = 30_000;
 const TICK_INTERVAL_MS = 1_000;
-const NEARBY_ENTRY_LIMIT = 5;
-
-function nearbyCalendarEntries(entries: CalendarEntryDTO[], nowMs: number) {
-  return [...entries]
-    .sort(
-      (left, right) =>
-        Math.abs(new Date(left.start_time).getTime() - nowMs) -
-        Math.abs(new Date(right.start_time).getTime() - nowMs),
-    )
-    .slice(0, NEARBY_ENTRY_LIMIT);
-}
 
 export default function TimersView() {
   const [timers, setTimers] = useState<ActiveTimerDTO[]>([]);
@@ -47,6 +35,9 @@ export default function TimersView() {
   const [nearbyEntries, setNearbyEntries] = useState<CalendarEntryDTO[]>([]);
   const [now, setNow] = useState(Date.now());
   const [completingKeys, setCompletingKeys] = useState<Set<string>>(new Set());
+  const inFlight = useRef(new Set<string>());
+  const completed = useRef(new Set<string>());
+  const autoAttempted = useRef(new Set<string>());
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >("default");
@@ -99,25 +90,27 @@ export default function TimersView() {
 
   const showCompletionNotification = useCallback((label: string) => {
     if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Timer complete", { body: label });
-      return true;
+      try {
+        new Notification("Timer complete", { body: label });
+        return true;
+      } catch {
+        setNotificationMessage("Browser notification could not be displayed.");
+      }
     }
     return false;
   }, []);
 
-  const loadTimers = useCallback(async () => {
+  const loadTimers = useCallback(async (clearSuccess = false) => {
     setLoading(true);
     setError(null);
-    setSuccessMessage(null);
+    if (clearSuccess) setSuccessMessage(null);
     try {
-      const [data, nextScheduleState, calendar] = await Promise.all([
-        getActiveTimers(),
-        getScheduleState(),
-        getTaskCalendar(),
-      ]);
-      setTimers(data.timers);
-      setScheduleState(nextScheduleState);
-      setNearbyEntries(nearbyCalendarEntries(calendar.entries, Date.now()));
+      const data = await getActiveTimers();
+      setTimers(
+        data.timers.filter((timer) => !completed.current.has(timer.timer_key)),
+      );
+      setScheduleState(data.diagnostics?.schedule_state ?? null);
+      setNearbyEntries(data.diagnostics?.nearby_entries ?? []);
     } catch (err) {
       if (isApiError(err)) {
         setError(err.detail);
@@ -140,11 +133,21 @@ export default function TimersView() {
 
   const handleComplete = useCallback(
     async (timer: ActiveTimerDTO) => {
-      if (completingKeys.has(timer.timer_key)) return;
+      if (
+        inFlight.current.has(timer.timer_key) ||
+        completed.current.has(timer.timer_key)
+      )
+        return;
+      inFlight.current.add(timer.timer_key);
       setCompletingKeys((prev) => new Set(prev).add(timer.timer_key));
       setSuccessMessage(null);
+      setError(null);
       try {
         const result = await completeTimer(timer.timer_key);
+        completed.current.add(timer.timer_key);
+        setTimers((current) =>
+          current.filter((item) => item.timer_key !== timer.timer_key),
+        );
         const usedBrowserNotification = showCompletionNotification(
           timer.display_label,
         );
@@ -163,8 +166,22 @@ export default function TimersView() {
       } catch (err) {
         if (isApiError(err)) {
           setError(err.detail);
+        } else {
+          setError({
+            errors: [
+              {
+                code: "NETWORK_ERROR",
+                message:
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to complete timer",
+                details: {},
+              },
+            ],
+          });
         }
       } finally {
+        inFlight.current.delete(timer.timer_key);
         setCompletingKeys((prev) => {
           const next = new Set(prev);
           next.delete(timer.timer_key);
@@ -172,7 +189,7 @@ export default function TimersView() {
         });
       }
     },
-    [completingKeys, loadTimers, showCompletionNotification],
+    [loadTimers, showCompletionNotification],
   );
 
   useEffect(() => {
@@ -193,7 +210,11 @@ export default function TimersView() {
 
   useEffect(() => {
     for (const timer of timers) {
-      if (isPast(timer.window_end_at, now)) {
+      if (
+        isPast(timer.window_end_at, now) &&
+        !autoAttempted.current.has(timer.timer_key)
+      ) {
+        autoAttempted.current.add(timer.timer_key);
         void handleComplete(timer);
       }
     }
@@ -219,7 +240,7 @@ export default function TimersView() {
           loading={loading}
           loadingLabel="Reloading…"
           variant="secondary"
-          onClick={() => void loadTimers()}
+          onClick={() => void loadTimers(true)}
         >
           Reload
         </LoadingButton>
@@ -291,9 +312,9 @@ export default function TimersView() {
                 </tbody>
               </table>
             </>
-          ) : (
+          ) : scheduleState ? (
             <p className="muted">No calendar entries are available.</p>
-          )}
+          ) : null}
         </div>
       ) : (
         <table className="data-table">

@@ -292,6 +292,14 @@ export interface ActiveTimerDTO {
   block_calendar_entry_id: string | null;
 }
 
+export interface ActiveTimersResponse {
+  timers: ActiveTimerDTO[];
+  diagnostics?: {
+    schedule_state: ScheduleStateDTO;
+    nearby_entries: CalendarEntryDTO[];
+  } | null;
+}
+
 export interface NotificationQueueItemDTO {
   notification_id: string;
   source_kind: NotificationSourceKind;

@@ -1,8 +1,8 @@
 import { apiGet, apiPost } from "./client";
-import type { ActiveTimerDTO, NotificationQueueItemDTO } from "./types";
+import type { ActiveTimersResponse, NotificationQueueItemDTO } from "./types";
 
-export function getActiveTimers(): Promise<{ timers: ActiveTimerDTO[] }> {
-  return apiGet<{ timers: ActiveTimerDTO[] }>("/api/timers/active");
+export function getActiveTimers(): Promise<ActiveTimersResponse> {
+  return apiGet<ActiveTimersResponse>("/api/timers/active");
 }
 
 export function completeTimer(

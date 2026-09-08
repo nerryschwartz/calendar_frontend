@@ -3,15 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { getScheduleState, getTaskCalendar } from "../api/schedule";
-import { getActiveTimers } from "../api/timers";
-import type { CalendarEntryDTO, ScheduleStateDTO } from "../api/types";
+import { completeTimer, getActiveTimers } from "../api/timers";
+import type {
+  ActiveTimerDTO,
+  CalendarEntryDTO,
+  ScheduleStateDTO,
+} from "../api/types";
 import TimersView from "./TimersView";
-
-vi.mock("../api/schedule", () => ({
-  getScheduleState: vi.fn(),
-  getTaskCalendar: vi.fn(),
-}));
 
 vi.mock("../api/timers", () => ({
   completeTimer: vi.fn(),
@@ -19,8 +17,21 @@ vi.mock("../api/timers", () => ({
 }));
 
 const getActiveTimersMock = vi.mocked(getActiveTimers);
-const getScheduleStateMock = vi.mocked(getScheduleState);
-const getTaskCalendarMock = vi.mocked(getTaskCalendar);
+const completeTimerMock = vi.mocked(completeTimer);
+
+function timer(overrides: Partial<ActiveTimerDTO> = {}): ActiveTimerDTO {
+  return {
+    timer_key: "timer-1",
+    source_kind: "FREE_TIME",
+    plan_id: null,
+    display_label: "Free time",
+    window_start_at: "2099-01-01T12:00:00Z",
+    window_end_at: "2099-01-01T13:00:00Z",
+    calendar_entry_id: "entry-1",
+    block_calendar_entry_id: null,
+    ...overrides,
+  };
+}
 
 function renderTimers() {
   render(
@@ -81,12 +92,13 @@ function installNotification(
 describe("TimersView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getActiveTimersMock.mockResolvedValue({ timers: [] });
-    getScheduleStateMock.mockResolvedValue(scheduleState());
-    getTaskCalendarMock.mockResolvedValue({
-      entries: [],
-      calendar_run_id: "run-1",
-    });
+    getActiveTimersMock
+      .mockReset()
+      .mockResolvedValue({
+        timers: [],
+        diagnostics: { schedule_state: scheduleState(), nearby_entries: [] },
+      });
+    completeTimerMock.mockReset().mockResolvedValue({ notification: null });
     installNotification(
       "default",
       vi.fn(async () => "granted"),
@@ -94,16 +106,19 @@ describe("TimersView", () => {
   });
 
   it("shows schedule diagnostics and nearby calendar entries when no timer is active", async () => {
-    getTaskCalendarMock.mockResolvedValue({
-      calendar_run_id: "run-1",
-      entries: [
-        calendarEntry({
-          calendar_entry_id: "later",
-          display_label: "Later task",
-          start_time: "2026-09-05T12:00:00.000Z",
-        }),
-        calendarEntry({ display_label: "Write notes" }),
-      ],
+    getActiveTimersMock.mockResolvedValue({
+      timers: [],
+      diagnostics: {
+        schedule_state: scheduleState(),
+        nearby_entries: [
+          calendarEntry({
+            calendar_entry_id: "later",
+            display_label: "Later task",
+            start_time: "2026-09-05T12:00:00.000Z",
+          }),
+          calendarEntry({ display_label: "Write notes" }),
+        ],
+      },
     });
 
     renderTimers();
@@ -166,6 +181,88 @@ describe("TimersView", () => {
     expect(requestPermission).toHaveBeenCalled();
     expect(
       await screen.findByText("Browser notifications enabled."),
+    ).toBeVisible();
+  });
+
+  it("keeps completion feedback and suppresses a still-active free-time timer", async () => {
+    const user = userEvent.setup();
+    getActiveTimersMock.mockResolvedValue({ timers: [timer()] });
+    renderTimers();
+    await user.click(await screen.findByRole("button", { name: "Complete" }));
+    expect(await screen.findByText(/Completed free-time timer/)).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Complete" }),
+    ).not.toBeInTheDocument();
+    expect(completeTimerMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Reload" }));
+    expect(
+      screen.queryByText(/Completed free-time timer/),
+    ).not.toBeInTheDocument();
+    expect(completeTimerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not repeat automatic completion after reload fails", async () => {
+    getActiveTimersMock
+      .mockResolvedValueOnce({
+        timers: [timer({ window_end_at: "2020-01-01T13:00:00Z" })],
+      })
+      .mockRejectedValue(new Error("Reload failed"));
+    renderTimers();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Reload failed");
+    expect(screen.getByText(/Completed free-time timer/)).toBeVisible();
+    expect(completeTimerMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("surfaces completion failures and permits an explicit retry", async () => {
+    const user = userEvent.setup();
+    getActiveTimersMock.mockResolvedValue({
+      timers: [timer({ window_end_at: "2020-01-01T13:00:00Z" })],
+    });
+    completeTimerMock.mockRejectedValueOnce(new Error("Completion offline"));
+    renderTimers();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Completion offline",
+    );
+    expect(completeTimerMock).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Complete" }));
+    expect(await screen.findByText(/Completed free-time timer/)).toBeVisible();
+    expect(completeTimerMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows active timers without optional diagnostics", async () => {
+    getActiveTimersMock.mockResolvedValue({ timers: [timer()] });
+    renderTimers();
+    expect(await screen.findByText("Free time")).toBeVisible();
+  });
+
+  it("reports notification request errors and insecure contexts", async () => {
+    const user = userEvent.setup();
+    installNotification(
+      "default",
+      vi.fn().mockRejectedValue(new Error("Denied")),
+    );
+    renderTimers();
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Enable browser notifications",
+      }),
+    );
+    expect(
+      await screen.findByText(
+        "Browser notification permission request failed.",
+      ),
+    ).toBeVisible();
+    Object.defineProperty(window, "isSecureContext", {
+      configurable: true,
+      value: false,
+    });
+    await user.click(
+      screen.getByRole("button", { name: "Enable browser notifications" }),
+    );
+    expect(
+      await screen.findByText(
+        "Browser notifications require HTTPS or localhost.",
+      ),
     ).toBeVisible();
   });
 

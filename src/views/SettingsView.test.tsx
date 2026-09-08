@@ -28,6 +28,47 @@ function settings(overrides: Partial<AppSettingsDTO> = {}): AppSettingsDTO {
 }
 
 describe("SettingsView", () => {
+  it("normalizes legacy timezone and saves a selected IANA zone", async () => {
+    getSettingsMock.mockResolvedValue(settings({ local_timezone: "EST" }));
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    const zone = await screen.findByLabelText("Local timezone");
+    expect(zone).toHaveValue("America/New_York");
+    expect(
+      screen.getByRole("option", { name: /America\/New_York \(.*UTC/ }),
+    ).toBeVisible();
+    await user.selectOptions(zone, "America/Chicago");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(updateSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({ local_timezone: "America/Chicago" }),
+    );
+  });
+
+  it("keeps invalid numeric input editable and rejects it before saving", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    const years = await screen.findByLabelText("Years");
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+    await user.clear(years);
+    await user.type(years, "1.5");
+    await user.click(screen.getByRole("button", { name: "Save settings" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Years must be a valid whole number",
+    );
+    expect(updateSettingsMock).not.toHaveBeenCalled();
+    expect(years).toHaveValue("1.5");
+  });
+
+  it("reports a failed initial load and allows retry", async () => {
+    const user = userEvent.setup();
+    getSettingsMock.mockRejectedValueOnce(new Error("Settings offline"));
+    render(<SettingsView />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Settings offline",
+    );
+    await user.click(screen.getByRole("button", { name: "Reload settings" }));
+    expect(await screen.findByLabelText("Years")).toBeVisible();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     getSettingsMock.mockResolvedValue(settings());
@@ -49,11 +90,11 @@ describe("SettingsView", () => {
     const hours = screen.getByLabelText("Hours");
     const minutes = screen.getByLabelText("Minutes");
 
-    expect(years).toHaveValue(1);
-    expect(months).toHaveValue(1);
-    expect(days).toHaveValue(1);
-    expect(hours).toHaveValue(1);
-    expect(minutes).toHaveValue(5);
+    expect(years).toHaveValue("1");
+    expect(months).toHaveValue("1");
+    expect(days).toHaveValue("1");
+    expect(hours).toHaveValue("1");
+    expect(minutes).toHaveValue("5");
 
     await user.clear(years);
     await user.type(years, "1");

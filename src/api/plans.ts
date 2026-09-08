@@ -1,4 +1,12 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
+import {
+  addUserConstraintGroup,
+  addUserWindow,
+  removeUserConstraintGroup,
+  removeUserWindow,
+  updateUserConstraintGroup,
+} from "./constraints";
+import { resolveDraftEditRefs } from "../utils/planDrafts";
 import type {
   BlockPlanDTO,
   CreateChildBody,
@@ -81,12 +89,18 @@ export function deletePlan(planId: string): Promise<{ status: string }> {
 export class DraftEditApplyError extends Error {
   appliedCount: number;
   cause: unknown;
+  remainingEdits?: DraftEdit[];
 
-  constructor(cause: unknown, appliedCount: number) {
+  constructor(
+    cause: unknown,
+    appliedCount: number,
+    remainingEdits?: DraftEdit[],
+  ) {
     super(cause instanceof Error ? cause.message : "Draft edit failed");
     this.name = "DraftEditApplyError";
     this.appliedCount = appliedCount;
     this.cause = cause;
+    this.remainingEdits = remainingEdits;
   }
 }
 
@@ -175,6 +189,21 @@ export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
         case "rename":
           await renamePlan(resolvePlanRef(edit.planRef), edit.name);
           break;
+        case "addConstraintGroup":
+          await addUserConstraintGroup(resolvePlanRef(edit.planRef), edit.body);
+          break;
+        case "replaceConstraintWindows":
+          await updateUserConstraintGroup(edit.groupId, edit.body);
+          break;
+        case "addConstraintWindow":
+          await addUserWindow(edit.groupId, edit.body);
+          break;
+        case "removeConstraintWindow":
+          await removeUserWindow(edit.groupId, edit.windowId);
+          break;
+        case "removeConstraintGroup":
+          await removeUserConstraintGroup(edit.groupId);
+          break;
         case "createChild":
           draftPlanIds.set(
             edit.draftId,
@@ -235,7 +264,13 @@ export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
       }
       appliedCount += 1;
     } catch (err) {
-      throw new DraftEditApplyError(err, appliedCount);
+      throw new DraftEditApplyError(
+        err,
+        appliedCount,
+        edits
+          .slice(appliedCount)
+          .map((pending) => resolveDraftEditRefs(pending, draftPlanIds)),
+      );
     }
   }
 

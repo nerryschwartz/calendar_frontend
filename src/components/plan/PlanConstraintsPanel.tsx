@@ -1,193 +1,227 @@
 import { useState } from "react";
 import {
-  addUserConstraintGroup,
-  addUserWindow,
-  removeUserConstraintGroup,
-  removeUserWindow,
-  updateUserConstraintGroup,
-} from "../../api/constraints";
-import type { PlanDetailDTO, TimeConstraintGroupDTO } from "../../api/types";
-import LoadingButton from "../LoadingButton";
+  persistedPlanRef,
+  type DraftEdit,
+  type PlanDetailDTO,
+  type UserWindowBody,
+} from "../../api/types";
 import LabeledField from "../LabeledField";
-import StatusBanner from "../StatusBanner";
-import { useAsyncAction } from "../../hooks/useAsyncAction";
-import { formatDateTime, datetimeLocalToIso } from "../../utils/format";
+import { datetimeLocalToIso, formatDateTime } from "../../utils/format";
 
 interface PlanConstraintsPanelProps {
   plan: PlanDetailDTO;
   editMode: boolean;
-  onUpdated: () => void;
+  draftEdits: DraftEdit[];
+  queueEdit: (edit: DraftEdit) => void;
 }
 
 export default function PlanConstraintsPanel({
   plan,
   editMode,
-  onUpdated,
+  draftEdits,
+  queueEdit,
 }: PlanConstraintsPanelProps) {
-  const { run, error, successMessage, clearFeedback } = useAsyncAction();
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-
-  const userGroups = plan.time_constraint_groups.filter(
-    (g) => g.constraint_kind === "USER",
+  const [error, setError] = useState<string | null>(null);
+  const canEdit = editMode && !plan.is_master;
+  const planRef = persistedPlanRef(plan.plan_id);
+  const queued = draftEdits.filter(
+    (edit) =>
+      "planRef" in edit &&
+      edit.planRef.kind === "persisted" &&
+      edit.planRef.planId === plan.plan_id,
+  );
+  const removedGroups = new Set(
+    queued
+      .filter((edit) => edit.type === "removeConstraintGroup")
+      .map((edit) => edit.groupId),
   );
 
-  const handleAddGroup = async () => {
-    if (!startTime || !endTime) return;
-    await run(
-      () =>
-        addUserConstraintGroup(plan.plan_id, {
-          windows: [
-            {
-              start_time: datetimeLocalToIso(startTime),
-              end_time: datetimeLocalToIso(endTime),
-            },
-          ],
-        }),
-      "Constraint group added",
-    );
-    onUpdated();
-  };
-
-  const handleRemoveGroup = async (group: TimeConstraintGroupDTO) => {
-    await run(
-      () => removeUserConstraintGroup(group.constraint_group_id),
-      "Constraint group removed",
-    );
-    onUpdated();
-  };
-
-  const handleAddWindow = async (group: TimeConstraintGroupDTO) => {
-    if (!startTime || !endTime) return;
-    await run(
-      () =>
-        addUserWindow(group.constraint_group_id, {
-          start_time: datetimeLocalToIso(startTime),
-          end_time: datetimeLocalToIso(endTime),
-        }),
-      "Window added",
-    );
-    onUpdated();
-  };
-
-  const handleReplaceWindows = async (group: TimeConstraintGroupDTO) => {
-    if (!startTime || !endTime) return;
-    await run(
-      () =>
-        updateUserConstraintGroup(group.constraint_group_id, {
-          windows: [
-            {
-              start_time: datetimeLocalToIso(startTime),
-              end_time: datetimeLocalToIso(endTime),
-            },
-          ],
-        }),
-      "Windows updated",
-    );
-    onUpdated();
+  const withWindow = (build: (window: UserWindowBody) => DraftEdit) => {
+    setError(null);
+    if (
+      !Number.isFinite(Date.parse(startTime)) ||
+      !Number.isFinite(Date.parse(endTime)) ||
+      Date.parse(endTime) <= Date.parse(startTime)
+    ) {
+      setError("End must be after a valid start time.");
+      return;
+    }
+    const start = datetimeLocalToIso(startTime);
+    const end = datetimeLocalToIso(endTime);
+    queueEdit(build({ start_time: start, end_time: end }));
+    setStartTime("");
+    setEndTime("");
   };
 
   return (
     <div className="detail-panel">
       <h3>Time constraints</h3>
-      <StatusBanner message={successMessage} onDismiss={clearFeedback} />
       {error && (
-        <p className="error-text">
-          {error.errors.map((e) => e.message).join("; ")}
+        <p className="error-text" role="alert">
+          {error}
         </p>
       )}
-
-      {plan.time_constraint_groups.length === 0 ? (
+      {plan.time_constraint_groups.length === 0 && (
         <p className="muted">No constraint groups.</p>
-      ) : (
-        plan.time_constraint_groups.map((group) => (
-          <div key={group.constraint_group_id} className="constraint-group">
-            <p>
-              <code>{group.constraint_kind}</code> · Group{" "}
-              {group.constraint_group_id}
-            </p>
+      )}
+      {plan.time_constraint_groups
+        .filter((group) => !removedGroups.has(group.constraint_group_id))
+        .map((group) => {
+          const groupEdits = queued.filter(
+            (edit) =>
+              "groupId" in edit && edit.groupId === group.constraint_group_id,
+          );
+          let windows = group.windows.map((window) => ({
+            ...window,
+            pending: false,
+          }));
+          for (const edit of groupEdits) {
+            if (edit.type === "removeConstraintWindow")
+              windows = windows.filter(
+                (window) => window.time_window_id !== edit.windowId,
+              );
+            if (edit.type === "replaceConstraintWindows")
+              windows = edit.body.windows.map((window, index) => ({
+                ...window,
+                time_window_id: "pending-" + index,
+                pending: true,
+              }));
+            if (edit.type === "addConstraintWindow")
+              windows.push({
+                ...edit.body,
+                time_window_id: "pending-" + windows.length,
+                pending: true,
+              });
+          }
+          return (
+            <div key={group.constraint_group_id} className="constraint-group">
+              <p>
+                <code>{group.constraint_kind}</code> · Group{" "}
+                {group.constraint_group_id}
+              </p>
+              <ul>
+                {windows.map((window) => (
+                  <li key={window.time_window_id}>
+                    {formatDateTime(window.start_time)} →{" "}
+                    {formatDateTime(window.end_time)}
+                    {window.pending && " (pending)"}
+                    {canEdit &&
+                      group.constraint_kind === "USER" &&
+                      !window.pending && (
+                        <button
+                          type="button"
+                          className="btn-text"
+                          onClick={() =>
+                            queueEdit({
+                              type: "removeConstraintWindow",
+                              planRef,
+                              groupId: group.constraint_group_id,
+                              windowId: window.time_window_id,
+                            })
+                          }
+                        >
+                          Queue remove window
+                        </button>
+                      )}
+                  </li>
+                ))}
+              </ul>
+              {canEdit && group.constraint_kind === "USER" && (
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      withWindow((body) => ({
+                        type: "addConstraintWindow",
+                        planRef,
+                        groupId: group.constraint_group_id,
+                        body,
+                      }))
+                    }
+                  >
+                    Queue add window
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() =>
+                      withWindow((window) => ({
+                        type: "replaceConstraintWindows",
+                        planRef,
+                        groupId: group.constraint_group_id,
+                        body: { windows: [window] },
+                      }))
+                    }
+                  >
+                    Queue replace windows
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-danger"
+                    onClick={() =>
+                      queueEdit({
+                        type: "removeConstraintGroup",
+                        planRef,
+                        groupId: group.constraint_group_id,
+                      })
+                    }
+                  >
+                    Queue remove group
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      {queued
+        .filter((edit) => edit.type === "addConstraintGroup")
+        .map((edit, index) => (
+          <div className="constraint-group" key={index}>
+            <p>Pending USER group</p>
             <ul>
-              {group.windows.map((window) => (
-                <li key={window.time_window_id}>
+              {edit.body.windows.map((window, i) => (
+                <li key={i}>
                   {formatDateTime(window.start_time)} →{" "}
                   {formatDateTime(window.end_time)}
-                  {editMode && group.constraint_kind === "USER" && (
-                    <button
-                      type="button"
-                      className="btn-text"
-                      onClick={() =>
-                        void run(
-                          () =>
-                            removeUserWindow(
-                              group.constraint_group_id,
-                              window.time_window_id,
-                            ),
-                          "Window removed",
-                        ).then(onUpdated)
-                      }
-                    >
-                      Remove window
-                    </button>
-                  )}
                 </li>
               ))}
             </ul>
-            {editMode && group.constraint_kind === "USER" && (
-              <div className="button-row">
-                <LoadingButton
-                  variant="secondary"
-                  onClick={() => void handleAddWindow(group)}
-                >
-                  Add window
-                </LoadingButton>
-                <LoadingButton
-                  variant="secondary"
-                  onClick={() => void handleReplaceWindows(group)}
-                >
-                  Replace windows
-                </LoadingButton>
-                <LoadingButton
-                  variant="danger"
-                  onClick={() => void handleRemoveGroup(group)}
-                >
-                  Remove group
-                </LoadingButton>
-              </div>
-            )}
           </div>
-        ))
-      )}
-
-      {editMode && (
-        <fieldset>
-          <legend>Add USER constraint group</legend>
+        ))}
+      {canEdit && (
+        <fieldset className="settings-fieldset">
+          <legend>User time window</legend>
           <LabeledField label="Start">
             <input
               type="datetime-local"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={(event) => setStartTime(event.target.value)}
             />
           </LabeledField>
           <LabeledField label="End">
             <input
               type="datetime-local"
               value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
+              onChange={(event) => setEndTime(event.target.value)}
             />
           </LabeledField>
-          <LoadingButton
-            variant="secondary"
-            onClick={() => void handleAddGroup()}
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() =>
+              withWindow((window) => ({
+                type: "addConstraintGroup",
+                planRef,
+                body: { windows: [window] },
+              }))
+            }
           >
-            Add group
-          </LoadingButton>
+            Queue add group
+          </button>
         </fieldset>
-      )}
-
-      {userGroups.length === 0 && !editMode && (
-        <p className="muted">
-          No user-editable constraints. Enter edit mode to add.
-        </p>
       )}
     </div>
   );

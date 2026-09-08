@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { applyDraftEdits, validatePlans } from "./plans";
+import { applyDraftEdits, DraftEditApplyError, validatePlans } from "./plans";
 import { refreshSchedule } from "./schedule";
 import {
   draftPlanRef,
   persistedPlanRef,
   type RefreshScheduleResult,
+  type DraftEdit,
 } from "./types";
 
 const refreshResult: RefreshScheduleResult = {
@@ -18,6 +19,54 @@ const refreshResult: RefreshScheduleResult = {
 };
 
 describe("plan draft API calls", () => {
+  it("retries failed constraints using the child already created on the previous attempt", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ plan_id: "created-id" }), {
+          status: 200,
+        }),
+      )
+      .mockRejectedValueOnce(new Error("Offline"))
+      .mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const edits: DraftEdit[] = [
+      {
+        type: "createChild",
+        draftId: "new-child",
+        parentRef: persistedPlanRef("parent"),
+        body: { kind: "TASK", name: "Child", is_critical: false },
+      },
+      {
+        type: "addConstraintGroup",
+        planRef: draftPlanRef("new-child"),
+        body: {
+          windows: [
+            {
+              start_time: "2026-09-10T10:00:00Z",
+              end_time: "2026-09-10T11:00:00Z",
+            },
+          ],
+        },
+      },
+    ];
+    let failed: DraftEditApplyError | undefined;
+    try {
+      await applyDraftEdits(edits);
+    } catch (error) {
+      failed = error as DraftEditApplyError;
+    }
+    expect(failed?.appliedCount).toBe(1);
+    expect(failed?.remainingEdits?.[0]).toMatchObject({
+      planRef: persistedPlanRef("created-id"),
+    });
+    await applyDraftEdits(failed!.remainingEdits!);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/plans/created-id/constraints/groups"),
+      expect.anything(),
+    );
+  });
   beforeEach(() => {
     vi.restoreAllMocks();
   });

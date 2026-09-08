@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { useSharedPlanDrafts } from "../components/PlanDraftProvider";
+import { removeDraftWithDependents } from "../utils/planDrafts";
 import {
   applyDraftEdits,
   isDraftEditApplyError,
@@ -20,9 +22,14 @@ interface UsePlanEditModeOptions {
 }
 
 export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
-  const [editMode, setEditMode] = useState(false);
-  const [draftEdits, setDraftEdits] = useState<DraftEdit[]>([]);
-  const [saving, setSaving] = useState(false);
+  const {
+    editMode,
+    setEditMode,
+    draftEdits,
+    setDraftEdits,
+    saving,
+    setSaving,
+  } = useSharedPlanDrafts();
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
   const [error, setError] = useState<ApiErrorDetail | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -36,7 +43,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   }, []);
 
   const removeDraft = useCallback((index: number) => {
-    setDraftEdits((prev) => prev.filter((_, i) => i !== index));
+    setDraftEdits((prev) => removeDraftWithDependents(prev, index));
   }, []);
 
   const clearDrafts = useCallback(() => {
@@ -68,7 +75,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   }, [clearDrafts]);
 
   const saveEdits = useCallback(async () => {
-    if (draftEdits.length === 0) return;
+    if (draftEdits.length === 0 || saving) return;
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
@@ -122,7 +129,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
         isDraftEditApplyError(err) && err.cause ? err.cause : err;
 
       if (isDraftEditApplyError(err)) {
-        setDraftEdits(toSave.slice(err.appliedCount));
+        setDraftEdits(err.remainingEdits ?? toSave.slice(err.appliedCount));
       }
 
       if (isApiError(failedEditError)) {
@@ -144,7 +151,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     } finally {
       setSaving(false);
     }
-  }, [clearDrafts, draftEdits, onSaved]);
+  }, [clearDrafts, draftEdits, onSaved, saving]);
 
   const cancelExit = useCallback(() => {
     setConfirmExit(false);

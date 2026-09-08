@@ -284,7 +284,7 @@ describe("TimersView", () => {
   });
 
   it("hides notification permission controls when notifications are unsupported", async () => {
-    delete (window as Partial<Window>).Notification;
+    Reflect.deleteProperty(window, "Notification");
 
     cleanup();
     renderTimers();

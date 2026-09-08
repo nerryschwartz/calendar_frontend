@@ -416,6 +416,26 @@ export type DraftEdit =
   | { type: "blockComplete"; planRef: PlanRef }
   | { type: "blockReopen"; planRef: PlanRef }
   | { type: "taskScheduling"; planRef: PlanRef; body: TaskSchedulingBody }
+  | { type: "addConstraintGroup"; planRef: PlanRef; body: UserGroupBody }
+  | {
+      type: "replaceConstraintWindows";
+      planRef: PlanRef;
+      groupId: string;
+      body: UserGroupBody;
+    }
+  | {
+      type: "addConstraintWindow";
+      planRef: PlanRef;
+      groupId: string;
+      body: UserWindowBody;
+    }
+  | {
+      type: "removeConstraintWindow";
+      planRef: PlanRef;
+      groupId: string;
+      windowId: string;
+    }
+  | { type: "removeConstraintGroup"; planRef: PlanRef; groupId: string }
   | { type: "blockScheduling"; planRef: PlanRef; body: BlockSchedulingBody }
   | { type: "taskBlockFamilies"; planRef: PlanRef; families: string[] };
 
@@ -474,6 +494,16 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
       return "Reopen block";
     case "taskScheduling":
       return "Update task scheduling";
+    case "addConstraintGroup":
+      return `Add time constraint to ${summarizePlanRef(edit.planRef)}`;
+    case "replaceConstraintWindows":
+      return `Replace time windows in group ${edit.groupId}`;
+    case "addConstraintWindow":
+      return `Add time window to group ${edit.groupId}`;
+    case "removeConstraintWindow":
+      return `Remove time window ${edit.windowId}`;
+    case "removeConstraintGroup":
+      return `Remove time constraint group ${edit.groupId}`;
     case "blockScheduling":
       return "Update block scheduling";
     case "taskBlockFamilies":

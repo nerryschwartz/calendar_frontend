@@ -9,6 +9,7 @@ import {
 import { refreshSchedule } from "../api/schedule";
 import {
   ApiError,
+  draftPlanRef,
   persistedPlanRef,
   type RefreshScheduleResult,
 } from "../api/types";
@@ -51,6 +52,73 @@ function deferred<T>() {
 }
 
 describe("usePlanEditMode", () => {
+  it("removes a creator and its nested dependents while preserving unrelated edits", () => {
+    const { result } = renderHook(() => usePlanEditMode());
+    act(() => {
+      result.current.queueEdit({
+        type: "createChild",
+        draftId: "parent",
+        parentRef: persistedPlanRef("master"),
+        body: { kind: "GOAL", name: "Parent", is_critical: false },
+      });
+      result.current.queueEdit({
+        type: "createChild",
+        draftId: "child",
+        parentRef: draftPlanRef("parent"),
+        body: { kind: "TASK", name: "Child", is_critical: false },
+      });
+      result.current.queueEdit({
+        type: "taskScheduling",
+        planRef: draftPlanRef("child"),
+        body: { duration_minutes: 30 },
+      });
+      result.current.queueEdit({
+        type: "addPrerequisite",
+        planRef: persistedPlanRef("other"),
+        prerequisitePlanRef: draftPlanRef("child"),
+      });
+      result.current.queueEdit({
+        type: "rename",
+        planRef: persistedPlanRef("other"),
+        name: "Kept",
+      });
+    });
+    act(() => result.current.removeDraft(0));
+    expect(result.current.draftEdits).toEqual([
+      { type: "rename", planRef: persistedPlanRef("other"), name: "Kept" },
+    ]);
+  });
+
+  it("keeps rewritten remaining references after a partial save", async () => {
+    const remaining = [
+      {
+        type: "taskScheduling" as const,
+        planRef: persistedPlanRef("created"),
+        body: { duration_minutes: 45 },
+      },
+    ];
+    applyDraftEditsMock.mockRejectedValueOnce(
+      new DraftEditApplyError(new Error("Offline"), 1, remaining),
+    );
+    const { result } = renderHook(() => usePlanEditMode());
+    act(() => {
+      result.current.queueEdit({
+        type: "createChild",
+        draftId: "child",
+        parentRef: persistedPlanRef("master"),
+        body: { kind: "TASK", name: "Child", is_critical: false },
+      });
+      result.current.queueEdit({
+        type: "taskScheduling",
+        planRef: draftPlanRef("child"),
+        body: { duration_minutes: 45 },
+      });
+    });
+    await act(() => result.current.saveEdits());
+    expect(result.current.draftEdits).toEqual(remaining);
+    await act(() => result.current.saveEdits());
+    expect(applyDraftEditsMock).toHaveBeenLastCalledWith(remaining);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     applyDraftEditsMock.mockImplementation(async (edits) => edits.length);

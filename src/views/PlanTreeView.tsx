@@ -29,7 +29,7 @@ interface PlanTreeViewProps {
 }
 
 export default function PlanTreeView({ planId }: PlanTreeViewProps) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [plan, setPlan] = useState<PlanDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,10 +99,13 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
   }, [loadPlan]);
 
   useEffect(() => {
-    if (searchParams.get("edit") === "1" && plan && !editMode) {
+    if (searchParams.get("edit") === "1" && plan) {
       enterEditMode();
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("edit");
+      setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, plan, editMode, enterEditMode]);
+  }, [searchParams, setSearchParams, plan, enterEditMode]);
 
   const requestDelete = async () => {
     if (!plan) return;
@@ -202,13 +205,16 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       )}
 
       <PlanConstraintsPanel
+        key={`constraints-${plan.plan_id}`}
         plan={plan}
         editMode={editMode}
-        onUpdated={() => void loadPlan()}
+        draftEdits={draftEdits}
+        queueEdit={queueEdit}
       />
 
       {editMode && (
         <PlanEditControls
+          key={plan.plan_id}
           plan={plan}
           draftEdits={draftEdits}
           queueEdit={queueEdit}
@@ -251,7 +257,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
                 <Link to={`/plan-tree/${prereq.prerequisite_plan_id}`}>
                   {prereq.name} ({prereq.plan_kind})
                 </Link>
-                {editMode && (
+                {editMode && !plan.is_master && (
                   <button
                     type="button"
                     className="btn-text"
@@ -274,7 +280,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
         )}
       </div>
 
-      {editMode && (
+      {editMode && !plan.is_master && (
         <LoadingButton variant="danger" onClick={() => void requestDelete()}>
           Delete plan…
         </LoadingButton>

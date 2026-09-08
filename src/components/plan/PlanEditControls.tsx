@@ -326,22 +326,24 @@ export default function PlanEditControls({
         </button>
       </fieldset>
 
-      <fieldset>
-        <legend>Add prerequisite</legend>
-        <div className="labeled-field">
-          <span>Prerequisite</span>
-          <PlanSearchInput
-            placeholder="Search prerequisite plan…"
-            onSelect={(result) =>
-              queueEdit({
-                type: "addPrerequisite",
-                planRef: persistedPlanRef(plan.plan_id),
-                prerequisitePlanRef: persistedPlanRef(result.plan_id),
-              })
-            }
-          />
-        </div>
-      </fieldset>
+      {!plan.is_master && (
+        <fieldset>
+          <legend>Add prerequisite</legend>
+          <div className="labeled-field">
+            <span>Prerequisite</span>
+            <PlanSearchInput
+              placeholder="Search prerequisite plan…"
+              onSelect={(result) =>
+                queueEdit({
+                  type: "addPrerequisite",
+                  planRef: persistedPlanRef(plan.plan_id),
+                  prerequisitePlanRef: persistedPlanRef(result.plan_id),
+                })
+              }
+            />
+          </div>
+        </fieldset>
+      )}
 
       {plan.task_detail && (
         <fieldset>

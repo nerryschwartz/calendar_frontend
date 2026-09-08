@@ -29,7 +29,7 @@ interface PlanTreeViewProps {
 }
 
 export default function PlanTreeView({ planId }: PlanTreeViewProps) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [plan, setPlan] = useState<PlanDetailDTO | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,8 +85,9 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
             edit.planRef.planId === plan.plan_id,
         )
       ) {
-        const parent = plan.ancestry.at(-1);
-        navigate(parent ? `/plan-tree/${parent.plan_id}` : "/plan-tree");
+        navigate(
+          plan.parent_id ? `/plan-tree/${plan.parent_id}` : "/plan-tree",
+        );
         return;
       }
 
@@ -99,10 +100,13 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
   }, [loadPlan]);
 
   useEffect(() => {
-    if (searchParams.get("edit") === "1" && plan && !editMode) {
+    if (searchParams.get("edit") === "1" && plan) {
       enterEditMode();
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("edit");
+      setSearchParams(nextParams, { replace: true });
     }
-  }, [searchParams, plan, editMode, enterEditMode]);
+  }, [searchParams, setSearchParams, plan, enterEditMode]);
 
   const requestDelete = async () => {
     if (!plan) return;
@@ -179,107 +183,117 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       />
       <ErrorBanner detail={error} onDismiss={() => setError(null)} />
       <RefreshResultPanel result={refreshResult} />
-      <DraftQueuePanel edits={draftEdits} onRemove={removeDraft} />
+      <DraftQueuePanel
+        edits={draftEdits}
+        onRemove={removeDraft}
+        disabled={saving}
+      />
 
       <nav className="breadcrumb">
-        {plan.ancestry.map((item) => (
-          <span key={item.plan_id}>
-            <Link to={`/plan-tree/${item.plan_id}`}>{item.name}</Link>
-            <span className="sep"> / </span>
-          </span>
-        ))}
+        {plan.ancestry
+          .filter((item) => item.plan_id !== plan.plan_id)
+          .map((item) => (
+            <span key={item.plan_id}>
+              <Link to={`/plan-tree/${item.plan_id}`}>{item.name}</Link>
+              <span className="sep"> / </span>
+            </span>
+          ))}
         <span>{plan.name}</span>
       </nav>
 
       <PlanDetailSections plan={plan} />
 
-      {plan.repetition_detail && (
-        <PlanRepetitionPanel
-          detail={plan.repetition_detail}
-          editMode={editMode}
-          onUpdated={() => void loadPlan()}
-        />
-      )}
+      <fieldset className="plan-edit-surface" disabled={saving}>
+        {plan.repetition_detail && (
+          <PlanRepetitionPanel
+            detail={plan.repetition_detail}
+            editMode={editMode}
+            onUpdated={() => void loadPlan()}
+          />
+        )}
 
-      <PlanConstraintsPanel
-        plan={plan}
-        editMode={editMode}
-        onUpdated={() => void loadPlan()}
-      />
-
-      {editMode && (
-        <PlanEditControls
+        <PlanConstraintsPanel
+          key={`constraints-${plan.plan_id}`}
           plan={plan}
+          editMode={editMode}
           draftEdits={draftEdits}
           queueEdit={queueEdit}
         />
-      )}
 
-      <div className="detail-panel">
-        <h3>Children</h3>
-        {plan.children.length === 0 ? (
-          <p className="muted">No children.</p>
-        ) : (
-          <ul className="link-list">
-            {plan.children.map((child) => (
-              <li key={child.plan_id}>
-                <Link to={`/plan-tree/${child.plan_id}`}>
-                  {child.name} ({child.plan_kind})
-                </Link>
-                <span className="muted">
-                  {child.goal_is_critical != null &&
-                    (child.goal_is_critical
-                      ? " · critical"
-                      : " · non-critical")}
-                  {child.goal_sort_order != null &&
-                    ` · order ${child.goal_sort_order}`}
-                </span>
-              </li>
-            ))}
-          </ul>
+        {editMode && (
+          <PlanEditControls
+            key={plan.plan_id}
+            plan={plan}
+            draftEdits={draftEdits}
+            queueEdit={queueEdit}
+          />
         )}
-      </div>
 
-      <div className="detail-panel">
-        <h3>Prerequisites</h3>
-        {plan.prerequisites.length === 0 ? (
-          <p className="muted">No prerequisites.</p>
-        ) : (
-          <ul className="link-list">
-            {plan.prerequisites.map((prereq) => (
-              <li key={prereq.prerequisite_plan_id}>
-                <Link to={`/plan-tree/${prereq.prerequisite_plan_id}`}>
-                  {prereq.name} ({prereq.plan_kind})
-                </Link>
-                {editMode && (
-                  <button
-                    type="button"
-                    className="btn-text"
-                    onClick={() =>
-                      queueEdit({
-                        type: "removePrerequisite",
-                        planRef: persistedPlanRef(plan.plan_id),
-                        prerequisitePlanRef: persistedPlanRef(
-                          prereq.prerequisite_plan_id,
-                        ),
-                      })
-                    }
-                  >
-                    Remove
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+        <div className="detail-panel">
+          <h3>Children</h3>
+          {plan.children.length === 0 ? (
+            <p className="muted">No children.</p>
+          ) : (
+            <ul className="link-list">
+              {plan.children.map((child) => (
+                <li key={child.plan_id}>
+                  <Link to={`/plan-tree/${child.plan_id}`}>
+                    {child.name} ({child.plan_kind})
+                  </Link>
+                  <span className="muted">
+                    {child.goal_is_critical != null &&
+                      (child.goal_is_critical
+                        ? " · critical"
+                        : " · non-critical")}
+                    {child.goal_sort_order != null &&
+                      ` · order ${child.goal_sort_order}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="detail-panel">
+          <h3>Prerequisites</h3>
+          {plan.prerequisites.length === 0 ? (
+            <p className="muted">No prerequisites.</p>
+          ) : (
+            <ul className="link-list">
+              {plan.prerequisites.map((prereq) => (
+                <li key={prereq.prerequisite_plan_id}>
+                  <Link to={`/plan-tree/${prereq.prerequisite_plan_id}`}>
+                    {prereq.name} ({prereq.plan_kind})
+                  </Link>
+                  {editMode && !plan.is_master && (
+                    <button
+                      type="button"
+                      className="btn-text"
+                      onClick={() =>
+                        queueEdit({
+                          type: "removePrerequisite",
+                          planRef: persistedPlanRef(plan.plan_id),
+                          prerequisitePlanRef: persistedPlanRef(
+                            prereq.prerequisite_plan_id,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {editMode && !plan.is_master && (
+          <LoadingButton variant="danger" onClick={() => void requestDelete()}>
+            Delete plan…
+          </LoadingButton>
         )}
-      </div>
-
-      {editMode && (
-        <LoadingButton variant="danger" onClick={() => void requestDelete()}>
-          Delete plan…
-        </LoadingButton>
-      )}
-
+      </fieldset>
       <ConfirmDialog
         open={confirmExit}
         title="Unsaved edits"

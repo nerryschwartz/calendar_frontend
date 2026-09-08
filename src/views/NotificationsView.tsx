@@ -86,49 +86,56 @@ export default function NotificationsView() {
       ) : notifications.length === 0 ? (
         <p className="muted">No pending notifications.</p>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Kind</th>
-              <th>Window ended</th>
-              <th>Queued</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {notifications.map((item) => (
-              <tr key={item.notification_id}>
-                <td>
-                  <Link to={`/plan-tree/${item.plan_id}`}>
-                    {item.display_label}
-                  </Link>
-                </td>
-                <td>
-                  <code>{item.source_kind}</code>
-                </td>
-                <td>{formatDateTime(item.window_end_at)}</td>
-                <td>{formatRelativeTime(item.created_at)}</td>
-                <td className="button-row">
-                  <Link
-                    to={`/plan-tree/${item.plan_id}?edit=1`}
-                    className="btn-link"
-                  >
-                    Edit plan
-                  </Link>
-                  <LoadingButton
-                    variant="secondary"
-                    loading={dismissingIds.has(item.notification_id)}
-                    loadingLabel="Discarding…"
-                    onClick={() => void handleDismiss(item)}
-                  >
-                    Discard
-                  </LoadingButton>
-                </td>
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Calendar entries"
+        >
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Kind</th>
+                <th>Window ended</th>
+                <th>Queued</th>
+                <th>Actions</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {notifications.map((item) => (
+                <tr key={item.notification_id}>
+                  <td>
+                    <Link to={`/plan-tree/${item.plan_id}`}>
+                      {item.display_label}
+                    </Link>
+                  </td>
+                  <td>
+                    <code>{item.source_kind}</code>
+                  </td>
+                  <td>{formatDateTime(item.window_end_at)}</td>
+                  <td>{formatRelativeTime(item.created_at)}</td>
+                  <td className="button-row">
+                    <Link
+                      to={`/plan-tree/${item.plan_id}?edit=1`}
+                      className="btn-link"
+                    >
+                      Edit plan
+                    </Link>
+                    <LoadingButton
+                      variant="secondary"
+                      loading={dismissingIds.has(item.notification_id)}
+                      loadingLabel="Discarding…"
+                      onClick={() => void handleDismiss(item)}
+                    >
+                      Discard
+                    </LoadingButton>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

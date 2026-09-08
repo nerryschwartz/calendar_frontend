@@ -136,6 +136,32 @@ export interface FreeTimeActivityDTO {
   updated_at: string;
 }
 
+export type FreeTimeDraftEdit =
+  | {
+      op: "create";
+      draft_ref: string;
+      name: string;
+      real_fraction: string;
+      minimum_block_size_minutes: number;
+      enabled: boolean;
+    }
+  | {
+      op: "update";
+      activity_ref: string;
+      name: string;
+      real_fraction: string;
+      minimum_block_size_minutes: number;
+    }
+  | { op: "set_enabled"; activity_ref: string; enabled: boolean }
+  | { op: "set_block_families"; activity_ref: string; families: string[] }
+  | { op: "clear_block_families"; activity_ref: string }
+  | {
+      op: "add_prerequisite" | "remove_prerequisite";
+      activity_ref: string;
+      prerequisite_plan_id: string;
+    }
+  | { op: "delete"; activity_ref: string };
+
 export interface PlanAncestryItemDTO {
   plan_id: string;
   name: string;
@@ -292,6 +318,20 @@ export interface ActiveTimerDTO {
   block_calendar_entry_id: string | null;
 }
 
+export interface ActiveTimersResponse {
+  timers: ActiveTimerDTO[];
+  diagnostics?: TimerDiagnosticsDTO | null;
+}
+
+export interface TimerDiagnosticsDTO {
+  backend_now: string;
+  active_calendar_run_id: string | null;
+  last_refresh_failed: boolean;
+  last_failure_at: string | null;
+  last_failure_reason: string | null;
+  nearby_entries: ActiveTimerDTO[];
+}
+
 export interface NotificationQueueItemDTO {
   notification_id: string;
   source_kind: NotificationSourceKind;
@@ -408,6 +448,31 @@ export type DraftEdit =
   | { type: "blockComplete"; planRef: PlanRef }
   | { type: "blockReopen"; planRef: PlanRef }
   | { type: "taskScheduling"; planRef: PlanRef; body: TaskSchedulingBody }
+  | { type: "addConstraintGroup"; planRef: PlanRef; body: UserGroupBody }
+  | {
+      type: "repetitionSettings";
+      planRef: PlanRef;
+      body: UpdateRepetitionSettingsBody;
+    }
+  | {
+      type: "replaceConstraintWindows";
+      planRef: PlanRef;
+      groupId: string;
+      body: UserGroupBody;
+    }
+  | {
+      type: "addConstraintWindow";
+      planRef: PlanRef;
+      groupId: string;
+      body: UserWindowBody;
+    }
+  | {
+      type: "removeConstraintWindow";
+      planRef: PlanRef;
+      groupId: string;
+      windowId: string;
+    }
+  | { type: "removeConstraintGroup"; planRef: PlanRef; groupId: string }
   | { type: "blockScheduling"; planRef: PlanRef; body: BlockSchedulingBody }
   | { type: "taskBlockFamilies"; planRef: PlanRef; families: string[] };
 
@@ -466,6 +531,18 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
       return "Reopen block";
     case "taskScheduling":
       return "Update task scheduling";
+    case "addConstraintGroup":
+      return `Add time constraint to ${summarizePlanRef(edit.planRef)}`;
+    case "repetitionSettings":
+      return "Update repetition settings";
+    case "replaceConstraintWindows":
+      return `Replace time windows in group ${edit.groupId}`;
+    case "addConstraintWindow":
+      return `Add time window to group ${edit.groupId}`;
+    case "removeConstraintWindow":
+      return `Remove time window ${edit.windowId}`;
+    case "removeConstraintGroup":
+      return `Remove time constraint group ${edit.groupId}`;
     case "blockScheduling":
       return "Update block scheduling";
     case "taskBlockFamilies":

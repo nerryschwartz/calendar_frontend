@@ -53,6 +53,7 @@ function planDetail(overrides: Partial<PlanDetailDTO> = {}): PlanDetailDTO {
         name: "Parent plan",
         plan_kind: "GOAL",
       },
+      { plan_id: "current-plan-id", name: "Current plan", plan_kind: "GOAL" },
     ],
     children: [],
     prerequisite_plan_ids: [],

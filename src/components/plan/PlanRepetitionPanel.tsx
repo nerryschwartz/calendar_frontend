@@ -3,9 +3,9 @@ import type { PlanDetailDTO, RepetitionPlanDTO } from "../../api/types";
 import {
   generateRepetitionInstances,
   refreshRepetition,
-  updateRepetitionSettings,
 } from "../../api/repetitions";
 import DetailGrid from "../DetailGrid";
+import ErrorBanner from "../ErrorBanner";
 import LoadingButton from "../LoadingButton";
 import StatusBanner from "../StatusBanner";
 import { useAsyncAction } from "../../hooks/useAsyncAction";
@@ -22,12 +22,14 @@ export default function PlanRepetitionPanel({
   editMode,
   onUpdated,
 }: PlanRepetitionPanelProps) {
-  const { run, successMessage, clearFeedback } = useAsyncAction();
+  const { run, loading, error, successMessage, clearFeedback } =
+    useAsyncAction();
 
   return (
     <div className="detail-panel">
       <h3>Repetition</h3>
       <StatusBanner message={successMessage} onDismiss={clearFeedback} />
+      <ErrorBanner detail={error} onDismiss={clearFeedback} />
       <DetailGrid
         items={[
           { label: "Repeat mode", value: detail.repeat_mode },
@@ -61,20 +63,7 @@ export default function PlanRepetitionPanel({
       {editMode && (
         <div className="button-row">
           <LoadingButton
-            variant="secondary"
-            onClick={() =>
-              void run(
-                () =>
-                  updateRepetitionSettings(detail.plan_id, {
-                    repeat_interval_minutes: detail.repeat_interval_minutes,
-                  }),
-                "Repetition settings saved",
-              ).then(onUpdated)
-            }
-          >
-            Save settings
-          </LoadingButton>
-          <LoadingButton
+            loading={loading}
             variant="secondary"
             onClick={() =>
               void run(
@@ -86,6 +75,7 @@ export default function PlanRepetitionPanel({
             Generate instances
           </LoadingButton>
           <LoadingButton
+            loading={loading}
             variant="secondary"
             onClick={() =>
               void run(

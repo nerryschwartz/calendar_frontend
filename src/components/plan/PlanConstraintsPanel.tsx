@@ -114,12 +114,20 @@ export default function PlanConstraintsPanel({
                           type="button"
                           className="btn-text"
                           onClick={() =>
-                            queueEdit({
-                              type: "removeConstraintWindow",
-                              planRef,
-                              groupId: group.constraint_group_id,
-                              windowId: window.time_window_id,
-                            })
+                            queueEdit(
+                              windows.length === 1
+                                ? {
+                                    type: "removeConstraintGroup",
+                                    planRef,
+                                    groupId: group.constraint_group_id,
+                                  }
+                                : {
+                                    type: "removeConstraintWindow",
+                                    planRef,
+                                    groupId: group.constraint_group_id,
+                                    windowId: window.time_window_id,
+                                  },
+                            )
                           }
                         >
                           Queue remove window

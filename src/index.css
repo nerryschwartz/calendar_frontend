@@ -332,6 +332,13 @@ a:hover {
   overflow-wrap: anywhere;
 }
 
+.plan-edit-surface {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
 .checkbox-label {
   display: flex !important;
   align-items: center;

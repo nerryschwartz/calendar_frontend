@@ -7,6 +7,7 @@ import {
   updateUserConstraintGroup,
 } from "./constraints";
 import { resolveDraftEditRefs } from "../utils/planDrafts";
+import { updateRepetitionSettings } from "./repetitions";
 import type {
   BlockPlanDTO,
   CreateChildBody,
@@ -191,6 +192,12 @@ export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
           break;
         case "addConstraintGroup":
           await addUserConstraintGroup(resolvePlanRef(edit.planRef), edit.body);
+          break;
+        case "repetitionSettings":
+          await updateRepetitionSettings(
+            resolvePlanRef(edit.planRef),
+            edit.body,
+          );
           break;
         case "replaceConstraintWindows":
           await updateUserConstraintGroup(edit.groupId, edit.body);

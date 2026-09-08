@@ -19,6 +19,28 @@ const refreshResult: RefreshScheduleResult = {
 };
 
 describe("plan draft API calls", () => {
+  it("saves queued repetition settings to the resolved plan", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(
+        async () => new Response(JSON.stringify({}), { status: 200 }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    await applyDraftEdits([
+      {
+        type: "repetitionSettings",
+        planRef: persistedPlanRef("repeat-1"),
+        body: { repeat_interval_minutes: 720 },
+      },
+    ]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/repetitions/repeat-1/settings"),
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ repeat_interval_minutes: 720 }),
+      }),
+    );
+  });
   it("retries failed constraints using the child already created on the previous attempt", async () => {
     const fetchMock = vi
       .fn()

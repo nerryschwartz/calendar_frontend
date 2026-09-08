@@ -418,6 +418,11 @@ export type DraftEdit =
   | { type: "taskScheduling"; planRef: PlanRef; body: TaskSchedulingBody }
   | { type: "addConstraintGroup"; planRef: PlanRef; body: UserGroupBody }
   | {
+      type: "repetitionSettings";
+      planRef: PlanRef;
+      body: UpdateRepetitionSettingsBody;
+    }
+  | {
       type: "replaceConstraintWindows";
       planRef: PlanRef;
       groupId: string;
@@ -496,6 +501,8 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
       return "Update task scheduling";
     case "addConstraintGroup":
       return `Add time constraint to ${summarizePlanRef(edit.planRef)}`;
+    case "repetitionSettings":
+      return "Update repetition settings";
     case "replaceConstraintWindows":
       return `Replace time windows in group ${edit.groupId}`;
     case "addConstraintWindow":

@@ -37,6 +37,46 @@ function renderWorkflow() {
 }
 
 describe("plan draft workflow", () => {
+  it("removes the last window as a group and queues its replacement as a new group", async () => {
+    vi.mocked(getPlanDetail).mockResolvedValue(
+      planDetail({
+        time_constraint_groups: [
+          {
+            constraint_group_id: "group-1",
+            plan_id: "plan-1",
+            constraint_kind: "USER",
+            windows: [
+              {
+                time_window_id: "window-1",
+                start_time: "2026-09-10T10:00:00Z",
+                end_time: "2026-09-10T11:00:00Z",
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkflow();
+    await user.click(
+      await screen.findByRole("button", { name: "Queue remove window" }),
+    );
+    expect(
+      screen.getByText("Remove time constraint group group-1"),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Queue add window" }),
+    ).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Start"), {
+      target: { value: "2026-09-11T10:00" },
+    });
+    fireEvent.change(screen.getByLabelText("End"), {
+      target: { value: "2026-09-11T11:00" },
+    });
+    await user.click(screen.getByRole("button", { name: "Queue add group" }));
+    expect(screen.getByText("Pending edits (2)")).toBeVisible();
+    expect(screen.getByText("Pending USER group")).toBeVisible();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getPlanDetail).mockResolvedValue(planDetail());
@@ -77,9 +117,7 @@ describe("plan draft workflow", () => {
     await user.click(
       await screen.findByRole("button", { name: "Exit edit mode" }),
     );
-    expect(
-      await screen.findByRole("button", { name: "Edit" }),
-    ).toBeVisible();
+    expect(await screen.findByRole("button", { name: "Edit" })).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Save edits" }),
     ).not.toBeInTheDocument();

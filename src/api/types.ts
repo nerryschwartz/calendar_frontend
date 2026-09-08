@@ -320,10 +320,16 @@ export interface ActiveTimerDTO {
 
 export interface ActiveTimersResponse {
   timers: ActiveTimerDTO[];
-  diagnostics?: {
-    schedule_state: ScheduleStateDTO;
-    nearby_entries: CalendarEntryDTO[];
-  } | null;
+  diagnostics?: TimerDiagnosticsDTO | null;
+}
+
+export interface TimerDiagnosticsDTO {
+  backend_now: string;
+  active_calendar_run_id: string | null;
+  last_refresh_failed: boolean;
+  last_failure_at: string | null;
+  last_failure_reason: string | null;
+  nearby_entries: ActiveTimerDTO[];
 }
 
 export interface NotificationQueueItemDTO {

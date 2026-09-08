@@ -4,11 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { completeTimer, getActiveTimers } from "../api/timers";
-import type {
-  ActiveTimerDTO,
-  CalendarEntryDTO,
-  ScheduleStateDTO,
-} from "../api/types";
+import type { ActiveTimerDTO, TimerDiagnosticsDTO } from "../api/types";
 import TimersView from "./TimersView";
 
 vi.mock("../api/timers", () => ({
@@ -42,30 +38,15 @@ function renderTimers() {
 }
 
 function scheduleState(
-  overrides: Partial<ScheduleStateDTO> = {},
-): ScheduleStateDTO {
+  overrides: Partial<TimerDiagnosticsDTO> = {},
+): TimerDiagnosticsDTO {
   return {
     active_calendar_run_id: "run-1",
     last_refresh_failed: false,
     last_failure_at: null,
     last_failure_reason: null,
-    updated_at: "2026-09-04T12:00:00.000Z",
-    ...overrides,
-  };
-}
-
-function calendarEntry(
-  overrides: Partial<CalendarEntryDTO> = {},
-): CalendarEntryDTO {
-  return {
-    calendar_entry_id: "entry-1",
-    entry_type: "TASK",
-    start_time: "2026-09-04T12:30:00.000Z",
-    end_time: "2026-09-04T13:00:00.000Z",
-    source_plan_id: "plan-1",
-    source_free_time_activity_id: null,
-    display_label: "Write notes",
-    calendar_run_id: "run-1",
+    backend_now: "2026-09-04T12:00:00.000Z",
+    nearby_entries: [],
     ...overrides,
   };
 }
@@ -92,12 +73,10 @@ function installNotification(
 describe("TimersView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getActiveTimersMock
-      .mockReset()
-      .mockResolvedValue({
-        timers: [],
-        diagnostics: { schedule_state: scheduleState(), nearby_entries: [] },
-      });
+    getActiveTimersMock.mockReset().mockResolvedValue({
+      timers: [],
+      diagnostics: scheduleState(),
+    });
     completeTimerMock.mockReset().mockResolvedValue({ notification: null });
     installNotification(
       "default",
@@ -109,14 +88,17 @@ describe("TimersView", () => {
     getActiveTimersMock.mockResolvedValue({
       timers: [],
       diagnostics: {
-        schedule_state: scheduleState(),
+        ...scheduleState({
+          last_refresh_failed: true,
+          last_failure_reason: "ASSIGNMENT_FAILED",
+        }),
         nearby_entries: [
-          calendarEntry({
-            calendar_entry_id: "later",
+          timer({
+            timer_key: "later",
             display_label: "Later task",
-            start_time: "2026-09-05T12:00:00.000Z",
+            window_start_at: "2026-09-05T12:00:00.000Z",
           }),
-          calendarEntry({ display_label: "Write notes" }),
+          timer({ display_label: "Write notes", source_kind: "BLOCK" }),
         ],
       },
     });
@@ -127,6 +109,8 @@ describe("TimersView", () => {
     expect(screen.getByText("run-1")).toBeVisible();
     expect(screen.getByText("Nearby calendar entries")).toBeVisible();
     expect(screen.getByText("Write notes")).toBeVisible();
+    expect(screen.getByText("BLOCK")).toBeVisible();
+    expect(screen.getByText(/ASSIGNMENT_FAILED/)).toBeVisible();
   });
 
   it("sets loading, clears stale feedback, and surfaces reload failures", async () => {

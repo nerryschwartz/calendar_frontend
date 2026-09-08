@@ -5,8 +5,7 @@ import {
   isApiError,
   type ActiveTimerDTO,
   type ApiErrorDetail,
-  type CalendarEntryDTO,
-  type ScheduleStateDTO,
+  type TimerDiagnosticsDTO,
 } from "../api/types";
 import ErrorBanner from "../components/ErrorBanner";
 import LoadingButton from "../components/LoadingButton";
@@ -29,10 +28,11 @@ export default function TimersView() {
   const [notificationMessage, setNotificationMessage] = useState<string | null>(
     null,
   );
-  const [scheduleState, setScheduleState] = useState<ScheduleStateDTO | null>(
+  const [diagnostics, setDiagnostics] = useState<TimerDiagnosticsDTO | null>(
     null,
   );
-  const [nearbyEntries, setNearbyEntries] = useState<CalendarEntryDTO[]>([]);
+  const nearbyEntries = diagnostics?.nearby_entries ?? [];
+  const loadVersion = useRef(0);
   const [now, setNow] = useState(Date.now());
   const [completingKeys, setCompletingKeys] = useState<Set<string>>(new Set());
   const inFlight = useRef(new Set<string>());
@@ -45,8 +45,15 @@ export default function TimersView() {
   useEffect(() => {
     if ("Notification" in window) {
       setNotificationPermission(Notification.permission);
+      if (Notification.permission === "granted")
+        setNotificationMessage("Browser notifications enabled.");
+      if (Notification.permission === "denied")
+        setNotificationMessage(
+          "Browser notifications are blocked in this browser.",
+        );
     } else {
       setNotificationPermission("unsupported");
+      setNotificationMessage("Browser notifications are not supported here.");
     }
   }, []);
 
@@ -101,17 +108,19 @@ export default function TimersView() {
   }, []);
 
   const loadTimers = useCallback(async (clearSuccess = false) => {
+    const version = ++loadVersion.current;
     setLoading(true);
     setError(null);
     if (clearSuccess) setSuccessMessage(null);
     try {
       const data = await getActiveTimers();
+      if (version !== loadVersion.current) return;
       setTimers(
         data.timers.filter((timer) => !completed.current.has(timer.timer_key)),
       );
-      setScheduleState(data.diagnostics?.schedule_state ?? null);
-      setNearbyEntries(data.diagnostics?.nearby_entries ?? []);
+      setDiagnostics(data.diagnostics ?? null);
     } catch (err) {
+      if (version !== loadVersion.current) return;
       if (isApiError(err)) {
         setError(err.detail);
       } else {
@@ -127,7 +136,7 @@ export default function TimersView() {
         });
       }
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, []);
 
@@ -203,6 +212,7 @@ export default function TimersView() {
       TICK_INTERVAL_MS,
     );
     return () => {
+      loadVersion.current += 1;
       window.clearInterval(pollId);
       window.clearInterval(tickId);
     };
@@ -261,122 +271,141 @@ export default function TimersView() {
       ) : timers.length === 0 ? (
         <div className="empty-state">
           <p className="muted">No active timer right now.</p>
-          {scheduleState ? (
+          {diagnostics ? (
             <dl className="detail-grid">
               <div className="detail-grid-row">
                 <dt>Active run</dt>
-                <dd>{scheduleState.active_calendar_run_id ?? "none"}</dd>
+                <dd>{diagnostics.active_calendar_run_id ?? "none"}</dd>
               </div>
               <div className="detail-grid-row">
-                <dt>Schedule updated</dt>
-                <dd>{formatDateTime(scheduleState.updated_at)}</dd>
+                <dt>Backend time</dt>
+                <dd>{formatDateTime(diagnostics.backend_now)}</dd>
               </div>
-              {scheduleState.last_refresh_failed && (
+              {diagnostics.last_refresh_failed && (
                 <div className="detail-grid-row">
                   <dt>Last refresh</dt>
                   <dd>
                     Failed
-                    {scheduleState.last_failure_reason
-                      ? `: ${scheduleState.last_failure_reason}`
+                    {diagnostics.last_failure_reason
+                      ? `: ${diagnostics.last_failure_reason}`
+                      : ""}
+                    {diagnostics.last_failure_at
+                      ? ` (${formatDateTime(diagnostics.last_failure_at)})`
                       : ""}
                   </dd>
                 </div>
               )}
             </dl>
           ) : (
-            <p className="muted">Schedule state is not available yet.</p>
+            <p className="muted">Timer diagnostics are unavailable.</p>
           )}
           {nearbyEntries.length > 0 ? (
             <>
               <h3>Nearby calendar entries</h3>
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Label</th>
-                    <th>Type</th>
-                    <th>Start</th>
-                    <th>End</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {nearbyEntries.slice(0, 5).map((entry) => (
-                    <tr key={entry.calendar_entry_id}>
-                      <td>{entry.display_label}</td>
-                      <td>
-                        <code>{entry.entry_type}</code>
-                      </td>
-                      <td>{formatDateTime(entry.start_time)}</td>
-                      <td>{formatDateTime(entry.end_time)}</td>
+              <div
+                className="table-scroll"
+                tabIndex={0}
+                role="region"
+                aria-label="Calendar entries"
+              >
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Label</th>
+                      <th>Type</th>
+                      <th>Start</th>
+                      <th>End</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {nearbyEntries.slice(0, 5).map((entry) => (
+                      <tr key={entry.timer_key}>
+                        <td>{entry.display_label}</td>
+                        <td>
+                          <code>{entry.source_kind}</code>
+                        </td>
+                        <td>{formatDateTime(entry.window_start_at)}</td>
+                        <td>{formatDateTime(entry.window_end_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
-          ) : scheduleState ? (
-            <p className="muted">No calendar entries are available.</p>
+          ) : diagnostics ? (
+            <p className="muted">No nearby calendar entries are available.</p>
           ) : null}
         </div>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Kind</th>
-              <th>Started</th>
-              <th>Ends</th>
-              <th>Duration</th>
-              <th>Countdown</th>
-              <th>Plan</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {timers.map((timer) => {
-              const overdue = isPast(timer.window_end_at, now);
-              return (
-                <tr
-                  key={timer.timer_key}
-                  className={overdue ? "row-overdue" : undefined}
-                >
-                  <td>{timer.display_label}</td>
-                  <td>
-                    <code>{timer.source_kind}</code>
-                  </td>
-                  <td>{formatDateTime(timer.window_start_at)}</td>
-                  <td>{formatDateTime(timer.window_end_at)}</td>
-                  <td>
-                    {formatDurationMinutes(
-                      timer.window_start_at,
-                      timer.window_end_at,
-                    )}
-                  </td>
-                  <td>
-                    {overdue
-                      ? "Overdue"
-                      : formatCountdown(timer.window_end_at, now)}
-                  </td>
-                  <td>
-                    {timer.plan_id ? (
-                      <Link to={`/plan-tree/${timer.plan_id}`}>View plan</Link>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td>
-                    <LoadingButton
-                      variant="secondary"
-                      loading={completingKeys.has(timer.timer_key)}
-                      loadingLabel="Completing…"
-                      onClick={() => void handleComplete(timer)}
-                    >
-                      Complete
-                    </LoadingButton>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Calendar entries"
+        >
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Kind</th>
+                <th>Started</th>
+                <th>Ends</th>
+                <th>Duration</th>
+                <th>Countdown</th>
+                <th>Plan</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {timers.map((timer) => {
+                const overdue = isPast(timer.window_end_at, now);
+                return (
+                  <tr
+                    key={timer.timer_key}
+                    className={overdue ? "row-overdue" : undefined}
+                  >
+                    <td>{timer.display_label}</td>
+                    <td>
+                      <code>{timer.source_kind}</code>
+                    </td>
+                    <td>{formatDateTime(timer.window_start_at)}</td>
+                    <td>{formatDateTime(timer.window_end_at)}</td>
+                    <td>
+                      {formatDurationMinutes(
+                        timer.window_start_at,
+                        timer.window_end_at,
+                      )}
+                    </td>
+                    <td>
+                      {overdue
+                        ? "Overdue"
+                        : formatCountdown(timer.window_end_at, now)}
+                    </td>
+                    <td>
+                      {timer.plan_id ? (
+                        <Link to={`/plan-tree/${timer.plan_id}`}>
+                          View plan
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td>
+                      <LoadingButton
+                        variant="secondary"
+                        loading={completingKeys.has(timer.timer_key)}
+                        loadingLabel="Completing…"
+                        onClick={() => void handleComplete(timer)}
+                      >
+                        Complete
+                      </LoadingButton>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

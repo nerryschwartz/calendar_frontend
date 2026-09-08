@@ -98,34 +98,41 @@ export default function BlockCalendarView() {
       ) : entries.length === 0 ? (
         <p className="muted">No block entries.</p>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Duration</th>
-              <th>Start</th>
-              <th>End</th>
-              <th>Plan</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.block_calendar_entry_id}>
-                <td>{entry.display_label}</td>
-                <td>
-                  {formatDurationMinutes(entry.start_time, entry.end_time)}
-                </td>
-                <td>{formatDateTime(entry.start_time)}</td>
-                <td>{formatDateTime(entry.end_time)}</td>
-                <td>
-                  <Link to={`/plan-tree/${entry.source_plan_id}`}>
-                    View plan
-                  </Link>
-                </td>
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Calendar entries"
+        >
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Duration</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Plan</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr key={entry.block_calendar_entry_id}>
+                  <td>{entry.display_label}</td>
+                  <td>
+                    {formatDurationMinutes(entry.start_time, entry.end_time)}
+                  </td>
+                  <td>{formatDateTime(entry.start_time)}</td>
+                  <td>{formatDateTime(entry.end_time)}</td>
+                  <td>
+                    <Link to={`/plan-tree/${entry.source_plan_id}`}>
+                      View plan
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

@@ -98,49 +98,58 @@ export default function CalendarsView() {
       ) : entries.length === 0 ? (
         <p className="muted">No calendar entries.</p>
       ) : (
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Type</th>
-              <th>Duration</th>
-              <th>Start</th>
-              <th>End</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr
-                key={entry.calendar_entry_id}
-                className={
-                  entry.entry_type === "FREE_TIME"
-                    ? "row-free-time"
-                    : "row-task"
-                }
-              >
-                <td>{entry.display_label}</td>
-                <td>
-                  <code>{entry.entry_type}</code>
-                </td>
-                <td>
-                  {formatDurationMinutes(entry.start_time, entry.end_time)}
-                </td>
-                <td>{formatDateTime(entry.start_time)}</td>
-                <td>{formatDateTime(entry.end_time)}</td>
-                <td>
-                  {entry.source_plan_id ? (
-                    <Link to={`/plan-tree/${entry.source_plan_id}`}>Plan</Link>
-                  ) : entry.source_free_time_activity_id ? (
-                    <Link to="/free-time">Free-time activity</Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
+        <div
+          className="table-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label="Calendar entries"
+        >
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Source</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {entries.map((entry) => (
+                <tr
+                  key={entry.calendar_entry_id}
+                  className={
+                    entry.entry_type === "FREE_TIME"
+                      ? "row-free-time"
+                      : "row-task"
+                  }
+                >
+                  <td>{entry.display_label}</td>
+                  <td>
+                    <code>{entry.entry_type}</code>
+                  </td>
+                  <td>
+                    {formatDurationMinutes(entry.start_time, entry.end_time)}
+                  </td>
+                  <td>{formatDateTime(entry.start_time)}</td>
+                  <td>{formatDateTime(entry.end_time)}</td>
+                  <td>
+                    {entry.source_plan_id ? (
+                      <Link to={`/plan-tree/${entry.source_plan_id}`}>
+                        Plan
+                      </Link>
+                    ) : entry.source_free_time_activity_id ? (
+                      <Link to="/free-time">Free-time activity</Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

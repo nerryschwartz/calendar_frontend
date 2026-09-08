@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyFreeTimeDraft, listFreeTimeActivities } from "../api/freeTime";
+import { refreshSchedule } from "../api/schedule";
 import type { FreeTimeActivityDTO } from "../api/types";
 import FreeTimeView from "./FreeTimeView";
 
@@ -10,19 +11,18 @@ vi.mock("../api/freeTime", () => ({
   applyFreeTimeDraft: vi.fn(),
   listFreeTimeActivities: vi.fn(),
 }));
+vi.mock("../api/schedule", () => ({ refreshSchedule: vi.fn() }));
 vi.mock("../api/plans", () => ({
-  searchPlans: vi
-    .fn()
-    .mockResolvedValue({
-      results: [
-        {
-          plan_id: "prerequisite-1",
-          name: "Preparation",
-          plan_kind: "TASK",
-          parent_id: null,
-        },
-      ],
-    }),
+  searchPlans: vi.fn().mockResolvedValue({
+    results: [
+      {
+        plan_id: "prerequisite-1",
+        name: "Preparation",
+        plan_kind: "TASK",
+        parent_id: null,
+      },
+    ],
+  }),
 }));
 const activity: FreeTimeActivityDTO = {
   free_time_activity_id: "activity-1",
@@ -45,8 +45,49 @@ const renderView = () =>
   );
 
 describe("FreeTimeView draft editing", () => {
+  it("retains committed activities when the subsequent calendar refresh fails", async () => {
+    const user = userEvent.setup();
+    saveMock.mockResolvedValue({
+      applied_count: 1,
+      activities: [{ ...activity, name: "Saved activity" }],
+    });
+    vi.mocked(refreshSchedule).mockRejectedValueOnce(
+      new Error("Refresh offline"),
+    );
+    renderView();
+    await screen.findByRole("heading", { name: "Reading" });
+    await user.click(screen.getByRole("button", { name: "Edit activities" }));
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Saved activity" },
+    });
+    await user.click(screen.getByRole("button", { name: "Save activities" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Refresh offline",
+    );
+    expect(
+      screen.getByRole("heading", { name: "Saved activity" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Save activities" }),
+    ).not.toBeInTheDocument();
+    expect(saveMock).toHaveBeenCalledTimes(1);
+    expect(refreshSchedule).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("button", { name: "Edit activities" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("Saved activity");
+    expect(
+      screen.getByRole("button", { name: "Save activities" }),
+    ).toBeDisabled();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(refreshSchedule).mockResolvedValue({
+      run_started_at: "2026-09-01T12:00:00Z",
+      resolved_blocks: null,
+      block_assignment: null,
+      resolved: null,
+      assignment: null,
+      free_time: null,
+    });
     listMock.mockResolvedValue({ activities: [activity] });
     saveMock.mockResolvedValue({ applied_count: 1, activities: [activity] });
   });

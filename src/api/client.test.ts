@@ -7,22 +7,20 @@ describe("API error responses", () => {
   it("normalizes FastAPI validation locations and messages", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(
-            JSON.stringify({
-              detail: [
-                {
-                  loc: ["body", "duration_minutes"],
-                  msg: "Input should be a valid integer",
-                  type: "int_parsing",
-                },
-              ],
-            }),
-            { status: 422 },
-          ),
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            detail: [
+              {
+                loc: ["body", "duration_minutes"],
+                msg: "Input should be a valid integer",
+                type: "int_parsing",
+              },
+            ],
+          }),
+          { status: 422 },
         ),
+      ),
     );
     await expect(apiGet("/test")).rejects.toMatchObject({
       detail: {
@@ -42,14 +40,12 @@ describe("API error responses", () => {
   ])("handles other HTTP error shapes", async (body) => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response(JSON.stringify(body), {
-            status: 400,
-            statusText: "Bad Request",
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify(body), {
+          status: 400,
+          statusText: "Bad Request",
+        }),
+      ),
     );
     await expect(apiGet("/test")).rejects.toBeInstanceOf(ApiError);
   });

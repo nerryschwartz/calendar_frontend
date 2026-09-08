@@ -419,6 +419,7 @@ a:hover {
 
 .view-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
@@ -517,6 +518,23 @@ button,
   background: #fff;
   border-radius: 0.5rem;
   overflow: hidden;
+}
+
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.view,
+.app-main {
+  min-width: 0;
+}
+.view-header > * {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .data-table th,

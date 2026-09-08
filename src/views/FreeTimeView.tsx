@@ -9,6 +9,7 @@ import PlanSearchInput from "../components/PlanSearchInput";
 import StatusBanner from "../components/StatusBanner";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useAsyncAction } from "../hooks/useAsyncAction";
+import { useCalendarRefresh } from "../hooks/useCalendarRefresh";
 import {
   activityDraft,
   buildFreeTimeEdits,
@@ -17,6 +18,7 @@ import {
 } from "../utils/freeTimeDrafts";
 
 export default function FreeTimeView() {
+  const refresh = useCalendarRefresh();
   const [activities, setActivities] = useState<FreeTimeActivityDTO[]>([]);
   const [rows, setRows] = useState<FreeTimeDraftRow[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -44,6 +46,7 @@ export default function FreeTimeView() {
 
   const beginEdit = () => {
     clearFeedback();
+    refresh.clearFeedback();
     setRows(activities.map(activityDraft));
     setDirty(false);
     setEditing(true);
@@ -85,6 +88,7 @@ export default function FreeTimeView() {
       setDirty(false);
       setEditing(false);
       setConfirmDiscard(false);
+      if (data.applied_count > 0) void refresh.runRefresh();
     }
   };
   const total = enabledFraction(rows);
@@ -136,10 +140,17 @@ export default function FreeTimeView() {
         </div>
       </div>
       <StatusBanner
-        message={successMessage}
+        message={
+          successMessage && refresh.refreshing
+            ? `${successMessage}; refreshing schedule`
+            : successMessage && refresh.error
+              ? `${successMessage}; schedule refresh failed`
+              : successMessage
+        }
         onDismiss={() => setSuccessMessage(null)}
       />
       <ErrorBanner detail={error} onDismiss={clearFeedback} />
+      <ErrorBanner detail={refresh.error} onDismiss={refresh.clearFeedback} />
       {editing ? (
         <>
           <div className="free-time-total">

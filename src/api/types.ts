@@ -136,6 +136,32 @@ export interface FreeTimeActivityDTO {
   updated_at: string;
 }
 
+export type FreeTimeDraftEdit =
+  | {
+      op: "create";
+      draft_ref: string;
+      name: string;
+      real_fraction: string;
+      minimum_block_size_minutes: number;
+      enabled: boolean;
+    }
+  | {
+      op: "update";
+      activity_ref: string;
+      name: string;
+      real_fraction: string;
+      minimum_block_size_minutes: number;
+    }
+  | { op: "set_enabled"; activity_ref: string; enabled: boolean }
+  | { op: "set_block_families"; activity_ref: string; families: string[] }
+  | { op: "clear_block_families"; activity_ref: string }
+  | {
+      op: "add_prerequisite" | "remove_prerequisite";
+      activity_ref: string;
+      prerequisite_plan_id: string;
+    }
+  | { op: "delete"; activity_ref: string };
+
 export interface PlanAncestryItemDTO {
   plan_id: string;
   name: string;

@@ -1,5 +1,11 @@
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "./client";
-import type { FreeTimeActivityDTO } from "./types";
+import type { FreeTimeActivityDTO, FreeTimeDraftEdit } from "./types";
+
+export function applyFreeTimeDraft(
+  edits: FreeTimeDraftEdit[],
+): Promise<{ applied_count: number; activities: FreeTimeActivityDTO[] }> {
+  return apiPost("/api/free-time/activities/draft-edits", { edits });
+}
 
 export function listFreeTimeActivities(): Promise<{
   activities: FreeTimeActivityDTO[];

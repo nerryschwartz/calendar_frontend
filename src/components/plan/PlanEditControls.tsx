@@ -787,50 +787,27 @@ function PlanTargetEditor({
               ? "Queue remove instance"
               : "Queue delete plan"}
           </button>
-          {target.detail && (
+          {target && (
             <PlanConstraintsPanel
-              plan={target.detail}
+              plan={
+                target.detail ?? {
+                  ...plan,
+                  plan_id: target.draftId,
+                  is_master: false,
+                  repetition_detail: null,
+                  time_constraint_groups: [],
+                }
+              }
               targetRef={ref}
+              title={
+                kind === "REPETITION"
+                  ? "Whole-series time constraints"
+                  : "Pending plan time constraints"
+              }
               editMode
               draftEdits={draftEdits}
               queueEdit={queueEdit}
             />
-          )}
-          {!target.detail && (
-            <fieldset>
-              <legend>
-                {kind === "REPETITION"
-                  ? "Whole-series time constraint"
-                  : "Pending plan time constraint"}
-              </legend>
-              <LabeledField label="Pending constraint start">
-                <input
-                  type="datetime-local"
-                  value={start}
-                  onChange={(event) => setStart(event.target.value)}
-                />
-              </LabeledField>
-              <LabeledField label="Pending constraint end">
-                <input
-                  type="datetime-local"
-                  value={end}
-                  onChange={(event) => setEnd(event.target.value)}
-                />
-              </LabeledField>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() =>
-                  queue(() => ({
-                    type: "addConstraintGroup",
-                    planRef: ref,
-                    body: { windows: [parseWindow(start, end)] },
-                  }))
-                }
-              >
-                Queue pending constraint
-              </button>
-            </fieldset>
           )}
         </>
       )}

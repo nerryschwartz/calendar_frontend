@@ -134,9 +134,8 @@ describe("plan draft workflow", () => {
     await user.click(
       await screen.findByRole("button", { name: "Queue add group" }),
     );
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "End must be after a valid start",
-    );
+    expect(screen.getByText("Enter a valid start time.")).toBeVisible();
+    expect(screen.getByText("Enter a valid end time.")).toBeVisible();
     expect(screen.getByRole("button", { name: "Save edits" })).toBeDisabled();
   });
 });

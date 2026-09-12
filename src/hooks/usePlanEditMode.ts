@@ -1,15 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSharedPlanDrafts } from "../components/PlanDraftProvider";
 import { removeDraftWithDependents } from "../utils/planDrafts";
-import {
-  resolveDraftEditRefs,
-  resolvePlanRefDrafts,
-} from "../utils/planDrafts";
-import { generationEdits } from "../utils/repetitionDrafts";
-import {
-  generateRepetitionInstances,
-  getRepetitionGenerationStatus,
-} from "../api/repetitions";
+import { generationBaseline, generationInput } from "../utils/generationInput";
+import { previewRepetitionInstances } from "../api/repetitionGeneration";
 import {
   repetitionReadiness,
   type GenerationBlocker,
@@ -18,7 +11,6 @@ import {
   applyDraftEdits,
   isDraftEditApplyError,
   validatePlans,
-  getPlanDetail,
 } from "../api/plans";
 import { refreshSchedule } from "../api/schedule";
 import {
@@ -37,10 +29,7 @@ interface UsePlanEditModeOptions {
   }) => void;
 }
 
-export function usePlanEditMode({
-  onSaved,
-  onGenerated,
-}: UsePlanEditModeOptions = {}) {
+export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   const {
     editMode,
     setEditMode,
@@ -63,7 +52,6 @@ export function usePlanEditMode({
   const [generationBlockers, setGenerationBlockers] = useState<
     GenerationBlocker[]
   >([]);
-  const [readinessVersion, setReadinessVersion] = useState(0);
   useEffect(() => {
     if (!editMode || saving) return;
     let active = true;
@@ -93,11 +81,19 @@ export function usePlanEditMode({
     return () => {
       active = false;
     };
-  }, [draftEdits, editMode, saving, readinessVersion]);
+  }, [draftEdits, editMode, saving]);
 
   const queueEdit = useCallback((edit: DraftEdit) => {
     if (actionLock.current) return;
-    setDraftEdits((prev) => [...prev, edit]);
+    setDraftEdits((prev) => [
+      ...prev,
+      edit.type === "addConstraintGroup"
+        ? {
+            ...edit,
+            groupId: edit.groupId ?? "draft-group:" + crypto.randomUUID(),
+          }
+        : edit,
+    ]);
     setSuccessMessage(null);
   }, []);
 
@@ -235,103 +231,47 @@ export function usePlanEditMode({
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
-    let appliedCount = 0;
-    let selectedId: string | undefined;
     try {
-      const templateIds: string[] = [];
-      if (ref.kind === "persisted") {
-        const repetition = (await getPlanDetail(ref.planId)).repetition_detail;
-        if (!repetition) throw new Error("Selected plan is not a repetition");
-        const visit = async (id: string): Promise<void> => {
-          templateIds.push(id);
-          const detail = await getPlanDetail(id);
-          for (const child of detail.children) await visit(child.plan_id);
-        };
-        await visit(repetition.template_root_id);
-      }
+      const { baseline, sourceRefs } = await generationBaseline(ref, [
+        ...draftEdits,
+        ...additions,
+      ]);
+      const templateRefs = new Set(Object.values(sourceRefs).map(planRefKey));
       const forms = [...generationForms.current.values()].filter(
         (form) =>
           planRefKey(form.ref) === planRefKey(ref) ||
           (form.ref.kind === "template" &&
             planRefKey(form.ref.repetitionRef) === planRefKey(ref)) ||
-          (form.ref.kind === "persisted" &&
-            templateIds.includes(form.ref.planId)),
+          templateRefs.has(planRefKey(form.ref)),
       );
       const current = forms.flatMap((form) => form.edits());
-      const all = [...draftEdits, ...additions, ...current];
-      const selected = generationEdits(all, ref, templateIds);
+      const all = [...draftEdits, ...additions, ...current].map(
+        (edit): DraftEdit =>
+          edit.type === "addConstraintGroup"
+            ? {
+                ...edit,
+                groupId: edit.groupId ?? "draft-group:" + crypto.randomUUID(),
+              }
+            : edit,
+      );
       setDraftEdits(all);
       forms.forEach((form) => form.clear());
-      let resolved = new Map<string, string>();
-      const completed = new Set<DraftEdit>();
-      await applyDraftEdits(selected, (edit, ids) => {
-        appliedCount += 1;
-        completed.add(edit);
-        resolved = new Map(ids);
-        setDraftEdits(
-          all
-            .filter((entry) => !completed.has(entry))
-            .map((entry) => resolveDraftEditRefs(entry, resolved)),
-        );
-      });
-      const persisted = resolvePlanRefDrafts(ref, resolved);
-      if (persisted.kind !== "persisted")
-        throw new Error("Repetition was not created");
-      selectedId = persisted.planId;
-      const before = await getPlanDetail(selectedId);
-      if (!before.repetition_detail?.generated_at) {
-        try {
-          await generateRepetitionInstances(selectedId);
-        } catch (err) {
-          const observed = await getPlanDetail(selectedId);
-          if (!observed.repetition_detail?.generated_at) throw err;
-        }
-      }
-      const status = await getRepetitionGenerationStatus();
-      const remaining = all
-        .filter((entry) => !completed.has(entry))
-        .map((entry) => resolveDraftEditRefs(entry, resolved));
-      const readiness = await repetitionReadiness(remaining);
-      setGenerationBlockers(readiness.blockers);
-      const generated = status.repetitions.find(
-        (item) => item.plan_id === selectedId,
+      const input = generationInput(baseline, sourceRefs, all);
+      const preview = await previewRepetitionInstances(input);
+      setDraftEdits([
+        ...all,
+        {
+          type: "generateInstances",
+          planRef: ref,
+          preview,
+          baseline,
+          sourceRefs,
+        },
+      ]);
+      setSuccessMessage(
+        `Queued ${preview.instances.length} instance(s); nothing saved`,
       );
-      const message = `Generated ${generated?.instance_count ?? 0} instance(s); applied ${appliedCount} edit(s)`;
-      setSuccessMessage(message);
-      setReadinessVersion((value) => value + 1);
-      onGenerated?.();
-      if (
-        !readiness.blockers.length &&
-        !status.repetitions.some((item) => !item.generated_at)
-      ) {
-        setRefreshingSchedule(true);
-        try {
-          const refreshed = await refreshSchedule();
-          setRefreshResult(refreshed);
-          setSuccessMessage(message + "; schedule refreshed");
-        } catch (err) {
-          setError(
-            isApiError(err)
-              ? err.detail
-              : {
-                  errors: [
-                    {
-                      code: "REFRESH_FAILED",
-                      message:
-                        err instanceof Error
-                          ? err.message
-                          : "Schedule refresh failed",
-                      details: {},
-                    },
-                  ],
-                },
-          );
-          setSuccessMessage(message + "; schedule refresh failed");
-        } finally {
-          setRefreshingSchedule(false);
-        }
-      }
-      return selectedId;
+      return undefined;
     } catch (err) {
       const cause = isDraftEditApplyError(err) ? err.cause : err;
       setError(
@@ -350,13 +290,7 @@ export function usePlanEditMode({
               ],
             },
       );
-      if (appliedCount) {
-        setSuccessMessage(
-          `Applied ${appliedCount} edit(s); remaining edits are queued`,
-        );
-        onGenerated?.();
-      }
-      return selectedId;
+      return undefined;
     } finally {
       actionLock.current = false;
       setSaving(false);

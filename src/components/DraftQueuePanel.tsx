@@ -20,6 +20,20 @@ export default function DraftQueuePanel({
         {edits.map((edit, index) => (
           <li key={`${edit.type}-${index}`}>
             <span>{summarizeDraftEdit(edit)}</span>
+            {edit.type === "generateInstances" && (
+              <ul>
+                {edit.preview.instances.map((instance) => (
+                  <li key={instance.root_ref}>
+                    {
+                      instance.nodes.find(
+                        (node) => node.ref === instance.root_ref,
+                      )?.name
+                    }{" "}
+                    (instance {instance.instance_index + 1})
+                  </li>
+                ))}
+              </ul>
+            )}
             <button
               type="button"
               className="btn-text"

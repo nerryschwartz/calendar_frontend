@@ -61,7 +61,11 @@ export interface CommitGenerationInput {
 }
 export interface CommitGenerationResult {
   repetition: RepetitionPlanDTO;
-  resolved_refs: Record<string, string>;
+  reference_map: {
+    plans: Record<string, string>;
+    groups: Record<string, string>;
+    windows: Record<string, string>;
+  };
 }
 export function previewRepetitionInstances(
   input: PreviewInput,

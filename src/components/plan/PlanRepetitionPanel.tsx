@@ -1,11 +1,7 @@
 import { Link } from "react-router-dom";
 import type { PlanDetailDTO, RepetitionPlanDTO } from "../../api/types";
-import { refreshRepetition } from "../../api/repetitions";
 import DetailGrid from "../DetailGrid";
-import ErrorBanner from "../ErrorBanner";
 import LoadingButton from "../LoadingButton";
-import StatusBanner from "../StatusBanner";
-import { useAsyncAction } from "../../hooks/useAsyncAction";
 import { formatDateTime } from "../../utils/format";
 
 interface PlanRepetitionPanelProps {
@@ -19,18 +15,12 @@ interface PlanRepetitionPanelProps {
 export default function PlanRepetitionPanel({
   detail,
   editMode,
-  onUpdated,
   onGenerate,
   saving,
 }: PlanRepetitionPanelProps) {
-  const { run, loading, error, successMessage, clearFeedback } =
-    useAsyncAction();
-
   return (
     <div className="detail-panel">
       <h3>Repetition</h3>
-      <StatusBanner message={successMessage} onDismiss={clearFeedback} />
-      <ErrorBanner detail={error} onDismiss={clearFeedback} />
       <DetailGrid
         items={[
           { label: "Repeat mode", value: detail.repeat_mode },
@@ -64,26 +54,12 @@ export default function PlanRepetitionPanel({
       {editMode && (
         <div className="button-row">
           <LoadingButton
-            loading={loading || saving}
+            loading={saving}
             disabled={!!detail.generated_at}
             variant="secondary"
             onClick={onGenerate}
           >
             Generate instances
-          </LoadingButton>
-          <LoadingButton
-            loading={loading}
-            variant="secondary"
-            onClick={() =>
-              void run(
-                () => refreshRepetition(detail.plan_id),
-                "Repetition refreshed",
-              ).then((result) => {
-                if (result) onUpdated();
-              })
-            }
-          >
-            Refresh repetition
           </LoadingButton>
         </div>
       )}

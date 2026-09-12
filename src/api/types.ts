@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { GenerationPreview, PreviewInput } from "./repetitionGeneration";
 
 export type PlanKind = "GOAL" | "TASK" | "BLOCK" | "REPETITION";
 export type RepeatMode = "MANUAL_COUNT" | "DATE_RANGE";
@@ -278,6 +279,14 @@ export interface PlanDetailDTO {
   task_detail: TaskPlanDTO | null;
   block_detail: BlockPlanDTO | null;
   repetition_detail: RepetitionPlanDTO | null;
+  clone_status?: "NOT_CLONED" | "LINKED" | "DETACHED";
+  cloned_from_id?: string | null;
+  repetition_instance?: {
+    repetition_plan_id: string;
+    instance_index: number;
+    is_critical: boolean;
+    sort_order: number;
+  } | null;
 }
 
 export interface MasterPlanResponse {
@@ -450,6 +459,16 @@ export function planRefsEqual(left: PlanRef, right: PlanRef): boolean {
 }
 
 export type DraftEdit =
+  | {
+      type: "generateInstances";
+      planRef: PlanRef;
+      preview: GenerationPreview;
+      baseline: PreviewInput;
+      sourceRefs: Record<string, PlanRef>;
+      resolvedRefs?: Record<string, string>;
+      appliedEdits?: DraftEdit[];
+      omittedIndices?: number[];
+    }
   | { type: "rename"; planRef: PlanRef; name: string }
   | {
       type: "createChild";
@@ -474,7 +493,12 @@ export type DraftEdit =
   | { type: "blockComplete"; planRef: PlanRef }
   | { type: "blockReopen"; planRef: PlanRef }
   | { type: "taskScheduling"; planRef: PlanRef; body: TaskSchedulingBody }
-  | { type: "addConstraintGroup"; planRef: PlanRef; body: UserGroupBody }
+  | {
+      type: "addConstraintGroup";
+      planRef: PlanRef;
+      groupId?: string;
+      body: UserGroupBody;
+    }
   | {
       type: "repetitionSettings";
       planRef: PlanRef;
@@ -535,6 +559,8 @@ export function getAssignmentConflicts(
 
 export function summarizeDraftEdit(edit: DraftEdit): string {
   switch (edit.type) {
+    case "generateInstances":
+      return `Generate ${edit.preview.instances.length} pending instance(s)`;
     case "rename":
       return `Rename plan to "${edit.name}"`;
     case "createChild":

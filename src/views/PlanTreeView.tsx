@@ -220,6 +220,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       <DraftQueuePanel
         edits={draftEdits}
         onRemove={removeDraft}
+        onQueue={queueEdit}
         disabled={saving}
       />
 

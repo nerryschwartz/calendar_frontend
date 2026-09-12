@@ -270,14 +270,17 @@ describe("PlanEditControls", () => {
         minimum_chunk_size_minutes: null,
       },
     });
-    fireEvent.change(screen.getByLabelText("Pending constraint start"), {
+    const constraints = within(
+      screen.getByRole("group", { name: "New time window" }),
+    );
+    fireEvent.change(constraints.getByLabelText("Start"), {
       target: { value: "2026-09-10T10:00" },
     });
-    fireEvent.change(screen.getByLabelText("Pending constraint end"), {
+    fireEvent.change(constraints.getByLabelText("End"), {
       target: { value: "2026-09-10T11:00" },
     });
     await user.click(
-      screen.getByRole("button", { name: "Queue pending constraint" }),
+      constraints.getByRole("button", { name: "Queue add group" }),
     );
     expect(queueEdit).toHaveBeenLastCalledWith(
       expect.objectContaining({

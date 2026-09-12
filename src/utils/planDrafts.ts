@@ -1,5 +1,6 @@
 import {
   persistedPlanRef,
+  planRefKey,
   templatePlanRef,
   type DraftEdit,
   type PlanRef,
@@ -9,6 +10,8 @@ export function resolvePlanRefDrafts(
   ref: PlanRef,
   resolved: Map<string, string>,
 ): PlanRef {
+  const known = resolved.get(planRefKey(ref));
+  if (known) return persistedPlanRef(known);
   if (ref.kind === "template")
     return templatePlanRef(resolvePlanRefDrafts(ref.repetitionRef, resolved));
   return ref.kind === "draft" && resolved.has(ref.draftId)
@@ -22,6 +25,30 @@ export function resolveDraftEditRefs(
 ): DraftEdit {
   const resolve = (ref: PlanRef): PlanRef =>
     resolvePlanRefDrafts(ref, resolved);
+  if (edit.type === "generateInstances")
+    return {
+      ...edit,
+      planRef: resolve(edit.planRef),
+      sourceRefs: Object.fromEntries(
+        Object.entries(edit.sourceRefs).map(([key, ref]) => [
+          key,
+          resolve(ref),
+        ]),
+      ),
+      resolvedRefs: { ...edit.resolvedRefs, ...Object.fromEntries(resolved) },
+    };
+  if ("groupId" in edit) {
+    return {
+      ...edit,
+      planRef: resolve(edit.planRef),
+      groupId: edit.groupId
+        ? (resolved.get(edit.groupId) ?? edit.groupId)
+        : undefined,
+      ...("windowId" in edit
+        ? { windowId: resolved.get(edit.windowId) ?? edit.windowId }
+        : {}),
+    } as DraftEdit;
+  }
   if (edit.type === "createChild")
     return { ...edit, parentRef: resolve(edit.parentRef) };
   if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite")
@@ -38,20 +65,39 @@ export function removeDraftWithDependents(
   index: number,
 ): DraftEdit[] {
   const removed = new Set<string>();
+  const excluded = new Set([index]);
   const referencesRemoved = (ref: PlanRef): boolean =>
     ref.kind === "template"
       ? referencesRemoved(ref.repetitionRef)
       : ref.kind === "draft" && removed.has(ref.draftId);
-  return edits.filter((edit, currentIndex) => {
-    const depends =
-      edit.type === "createChild"
-        ? referencesRemoved(edit.parentRef)
-        : referencesRemoved(edit.planRef) ||
-          ((edit.type === "addPrerequisite" ||
-            edit.type === "removePrerequisite") &&
-            referencesRemoved(edit.prerequisitePlanRef));
-    if (currentIndex !== index && !depends) return true;
-    if (edit.type === "createChild") removed.add(edit.draftId);
-    return false;
-  });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    edits.forEach((edit, currentIndex) => {
+      const depends =
+        edit.type === "createChild"
+          ? referencesRemoved(edit.parentRef)
+          : referencesRemoved(edit.planRef) ||
+            ((edit.type === "addPrerequisite" ||
+              edit.type === "removePrerequisite") &&
+              referencesRemoved(edit.prerequisitePlanRef));
+      if (!excluded.has(currentIndex) && !depends) return;
+      if (!excluded.has(currentIndex)) {
+        excluded.add(currentIndex);
+        changed = true;
+      }
+      const add = (id: string) => {
+        if (!removed.has(id)) {
+          removed.add(id);
+          changed = true;
+        }
+      };
+      if (edit.type === "createChild") add(edit.draftId);
+      if (edit.type === "generateInstances")
+        edit.preview.instances.forEach((instance) =>
+          instance.nodes.forEach((node) => add(node.ref)),
+        );
+    });
+  }
+  return edits.filter((_, currentIndex) => !excluded.has(currentIndex));
 }

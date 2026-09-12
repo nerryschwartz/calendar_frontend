@@ -1,11 +1,7 @@
 import { Link } from "react-router-dom";
 import type { PlanDetailDTO, RepetitionPlanDTO } from "../../api/types";
-import { refreshRepetition } from "../../api/repetitions";
 import DetailGrid from "../DetailGrid";
-import ErrorBanner from "../ErrorBanner";
 import LoadingButton from "../LoadingButton";
-import StatusBanner from "../StatusBanner";
-import { useAsyncAction } from "../../hooks/useAsyncAction";
 import { formatDateTime } from "../../utils/format";
 
 interface PlanRepetitionPanelProps {
@@ -19,18 +15,12 @@ interface PlanRepetitionPanelProps {
 export default function PlanRepetitionPanel({
   detail,
   editMode,
-  onUpdated,
   onGenerate,
   saving,
 }: PlanRepetitionPanelProps) {
-  const { run, loading, error, successMessage, clearFeedback } =
-    useAsyncAction();
-
   return (
     <div className="detail-panel">
       <h3>Repetition</h3>
-      <StatusBanner message={successMessage} onDismiss={clearFeedback} />
-      <ErrorBanner detail={error} onDismiss={clearFeedback} />
       <DetailGrid
         items={[
           { label: "Repeat mode", value: detail.repeat_mode },
@@ -64,26 +54,12 @@ export default function PlanRepetitionPanel({
       {editMode && (
         <div className="button-row">
           <LoadingButton
-            loading={loading || saving}
+            loading={saving}
             disabled={!!detail.generated_at}
             variant="secondary"
             onClick={onGenerate}
           >
             Generate instances
-          </LoadingButton>
-          <LoadingButton
-            loading={loading}
-            variant="secondary"
-            onClick={() =>
-              void run(
-                () => refreshRepetition(detail.plan_id),
-                "Repetition refreshed",
-              ).then((result) => {
-                if (result) onUpdated();
-              })
-            }
-          >
-            Refresh repetition
           </LoadingButton>
         </div>
       )}
@@ -96,6 +72,34 @@ export function PlanDetailSections({ plan }: { plan: PlanDetailDTO }) {
     { label: "Plan ID", value: <code>{plan.plan_id}</code> },
     { label: "Kind", value: plan.plan_kind },
     { label: "Master", value: plan.is_master ? "Yes" : "No" },
+    ...(plan.clone_status && plan.clone_status !== "NOT_CLONED"
+      ? [
+          {
+            label: "Template linkage",
+            value: plan.clone_status === "LINKED" ? "Linked" : "Detached",
+          },
+        ]
+      : []),
+    ...(plan.cloned_from_id
+      ? [
+          {
+            label: "Source template",
+            value: (
+              <Link to={`/plan-tree/${plan.cloned_from_id}`}>
+                {plan.cloned_from_id}
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    ...(plan.repetition_instance
+      ? [
+          {
+            label: "Repetition instance",
+            value: plan.repetition_instance.instance_index + 1,
+          },
+        ]
+      : []),
     {
       label: "Parent",
       value: plan.parent_id ? (

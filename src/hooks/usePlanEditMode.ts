@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { useSharedPlanDrafts } from "../components/PlanDraftProvider";
 import { removeDraftWithDependents } from "../utils/planDrafts";
-import { generationBaseline, generationInput } from "../utils/generationInput";
+import {
+  generationBaseline,
+  generationInput,
+  generationIsFresh,
+} from "../utils/generationInput";
 import { previewRepetitionInstances } from "../api/repetitionGeneration";
 import {
   repetitionReadiness,
@@ -256,10 +260,35 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
       );
       setDraftEdits(all);
       forms.forEach((form) => form.clear());
-      const input = generationInput(baseline, sourceRefs, all);
+      const existingIndex = all.findIndex(
+        (edit) =>
+          edit.type === "generateInstances" &&
+          planRefKey(edit.planRef) === planRefKey(ref),
+      );
+      const existing = all[existingIndex];
+      let remaining = all;
+      if (existing?.type === "generateInstances") {
+        const replacement = removeDraftWithDependents(all, existingIndex);
+        const customized = replacement.length < all.length - 1;
+        if (generationIsFresh(existing, all) && !customized) {
+          setSuccessMessage(
+            `Already queued ${existing.preview.instances.length} instance(s); nothing saved`,
+          );
+          return undefined;
+        }
+        if (
+          customized &&
+          !window.confirm(
+            "Regenerate instances? This replaces customized instances, omissions, and edits depending on them. Other queued work stays unchanged.",
+          )
+        )
+          return undefined;
+        remaining = replacement;
+      }
+      const input = generationInput(baseline, sourceRefs, remaining);
       const preview = await previewRepetitionInstances(input);
       setDraftEdits([
-        ...all,
+        ...remaining,
         {
           type: "generateInstances",
           planRef: ref,

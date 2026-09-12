@@ -206,7 +206,19 @@ export function generationInput(
     const parent = keyFor(edit.parentRef);
     if (!nodes.some((node) => node.ref === parent)) continue;
     const ref = "draft:" + edit.draftId;
-    nodes.push(newNode(ref, parent, edit.body));
+    const child = newNode(ref, parent, edit.body);
+    child.sort_order =
+      Math.max(
+        -1,
+        ...nodes
+          .filter(
+            (node) =>
+              node.parent_ref === parent &&
+              node.is_critical === child.is_critical,
+          )
+          .map((node) => node.sort_order ?? -1),
+      ) + 1;
+    nodes.push(child);
     sourceRefs[ref] = draftPlanRef(edit.draftId);
     if (edit.body.kind === "REPETITION") {
       const root = "template:" + ref;
@@ -323,7 +335,33 @@ export function semanticInput(input: PreviewInput): string {
         window.start_time = time(window.start_time);
         window.end_time = time(window.end_time);
       }
+    if (node.ref === value.template.root_ref) {
+      node.parent_ref = null;
+      node.is_critical = null;
+      node.sort_order = null;
+    }
+    if (node.repetition) {
+      node.repetition.start_time = time(node.repetition.start_time);
+      if (node.repetition.end_time)
+        node.repetition.end_time = time(node.repetition.end_time);
+    }
+    node.constraint_groups = node.constraint_groups
+      .map((group) => ({
+        ...group,
+        ref: "",
+        windows: group.windows
+          .map((window) => ({ ...window, ref: "" }))
+          .sort((a, b) =>
+            (a.start_time + a.end_time).localeCompare(
+              b.start_time + b.end_time,
+            ),
+          ),
+      }))
+      .sort((a, b) =>
+        JSON.stringify(a.windows).localeCompare(JSON.stringify(b.windows)),
+      );
   }
+  value.template.nodes.sort((a, b) => a.ref.localeCompare(b.ref));
   const canonical = (value: unknown): unknown =>
     Array.isArray(value)
       ? value.map(canonical)

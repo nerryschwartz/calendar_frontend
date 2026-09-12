@@ -177,3 +177,31 @@ export function generatedPlanRef(key: string, edits: DraftEdit[]): PlanRef {
     ? draftPlanRef(key)
     : persistedPlanRef(key);
 }
+
+export function generatedLinkState(
+  item: PendingPlan,
+  edits: DraftEdit[],
+): "Linked" | "Detached" {
+  if (!item.generation) return "Linked";
+  const instance = item.generation.batch.preview.instances.find(
+    (instance) => instance.instance_index === item.generation!.index,
+  )!;
+  const nodes = new Map(instance.nodes.map((node) => [node.ref, node]));
+  const detached = new Set<string>();
+  for (const edit of edits) {
+    if (edit.type === "generateInstances") continue;
+    const target = edit.type === "createChild" ? edit.parentRef : edit.planRef;
+    if (target.kind !== "draft" || !nodes.has(target.draftId)) continue;
+    detached.add(target.draftId);
+    if (edit.type === "delete") {
+      const parent = nodes.get(target.draftId)?.parent_ref;
+      if (parent && nodes.has(parent)) detached.add(parent);
+    }
+  }
+  let node: ProjectionNode | undefined = item.generation.node;
+  while (node) {
+    if (detached.has(node.ref)) return "Detached";
+    node = node.parent_ref ? nodes.get(node.parent_ref) : undefined;
+  }
+  return "Linked";
+}

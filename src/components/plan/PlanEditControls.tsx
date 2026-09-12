@@ -14,7 +14,11 @@ import {
   type UpdateRepetitionSettingsBody,
 } from "../../api/types";
 import { getPlanDetail } from "../../api/plans";
-import { pendingPlans, type PendingPlan } from "../../utils/generatedPlans";
+import {
+  pendingPlans,
+  generatedLinkState,
+  type PendingPlan,
+} from "../../utils/generatedPlans";
 import PlanConstraintsPanel from "./PlanConstraintsPanel";
 import { useGenerationForm } from "../PlanDraftProvider";
 import { datetimeLocalToIso } from "../../utils/format";
@@ -565,6 +569,12 @@ function PlanTargetEditor({
   };
   return (
     <>
+      {target?.generation && (
+        <p role="status">
+          Instance {target.generation.index + 1}:{" "}
+          {generatedLinkState(target, draftEdits)}
+        </p>
+      )}
       {error && (
         <p className="error-text" role="alert">
           {error}

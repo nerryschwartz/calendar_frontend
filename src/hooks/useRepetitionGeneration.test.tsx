@@ -77,3 +77,39 @@ it("preserves queued input after a failed preview and ignores concurrent Generat
   expect(result.current.error?.errors[0].message).toBe("Preview offline");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+
+it("does not duplicate unchanged previews and confirms before replacing omissions", async () => {
+  const fetchMock = fixture();
+  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+  const { result } = renderHook(() => usePlanEditMode());
+  act(() => result.current.queueEdit(repetitionCreate));
+  await act(() => result.current.generateInstances(draftPlanRef("repeat")));
+  await act(() => result.current.generateInstances(draftPlanRef("repeat")));
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  const instance = pendingPlans(result.current.draftEdits).find(
+    (item) => item.generation,
+  )!;
+  act(() =>
+    result.current.queueEdit({
+      type: "delete",
+      planRef: draftPlanRef(instance.draftId),
+    }),
+  );
+  await act(() => result.current.generateInstances(draftPlanRef("repeat")));
+  expect(confirm).toHaveBeenCalledOnce();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(result.current.draftEdits.some((edit) => edit.type === "delete")).toBe(
+    true,
+  );
+  confirm.mockReturnValue(true);
+  await act(() => result.current.generateInstances(draftPlanRef("repeat")));
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(result.current.draftEdits.some((edit) => edit.type === "delete")).toBe(
+    false,
+  );
+  expect(
+    result.current.draftEdits.filter(
+      (edit) => edit.type === "generateInstances",
+    ),
+  ).toHaveLength(1);
+});

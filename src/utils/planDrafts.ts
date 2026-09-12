@@ -65,20 +65,39 @@ export function removeDraftWithDependents(
   index: number,
 ): DraftEdit[] {
   const removed = new Set<string>();
+  const excluded = new Set([index]);
   const referencesRemoved = (ref: PlanRef): boolean =>
     ref.kind === "template"
       ? referencesRemoved(ref.repetitionRef)
       : ref.kind === "draft" && removed.has(ref.draftId);
-  return edits.filter((edit, currentIndex) => {
-    const depends =
-      edit.type === "createChild"
-        ? referencesRemoved(edit.parentRef)
-        : referencesRemoved(edit.planRef) ||
-          ((edit.type === "addPrerequisite" ||
-            edit.type === "removePrerequisite") &&
-            referencesRemoved(edit.prerequisitePlanRef));
-    if (currentIndex !== index && !depends) return true;
-    if (edit.type === "createChild") removed.add(edit.draftId);
-    return false;
-  });
+  let changed = true;
+  while (changed) {
+    changed = false;
+    edits.forEach((edit, currentIndex) => {
+      const depends =
+        edit.type === "createChild"
+          ? referencesRemoved(edit.parentRef)
+          : referencesRemoved(edit.planRef) ||
+            ((edit.type === "addPrerequisite" ||
+              edit.type === "removePrerequisite") &&
+              referencesRemoved(edit.prerequisitePlanRef));
+      if (!excluded.has(currentIndex) && !depends) return;
+      if (!excluded.has(currentIndex)) {
+        excluded.add(currentIndex);
+        changed = true;
+      }
+      const add = (id: string) => {
+        if (!removed.has(id)) {
+          removed.add(id);
+          changed = true;
+        }
+      };
+      if (edit.type === "createChild") add(edit.draftId);
+      if (edit.type === "generateInstances")
+        edit.preview.instances.forEach((instance) =>
+          instance.nodes.forEach((node) => add(node.ref)),
+        );
+    });
+  }
+  return edits.filter((_, currentIndex) => !excluded.has(currentIndex));
 }

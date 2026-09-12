@@ -72,6 +72,34 @@ export function PlanDetailSections({ plan }: { plan: PlanDetailDTO }) {
     { label: "Plan ID", value: <code>{plan.plan_id}</code> },
     { label: "Kind", value: plan.plan_kind },
     { label: "Master", value: plan.is_master ? "Yes" : "No" },
+    ...(plan.clone_status && plan.clone_status !== "NOT_CLONED"
+      ? [
+          {
+            label: "Template linkage",
+            value: plan.clone_status === "LINKED" ? "Linked" : "Detached",
+          },
+        ]
+      : []),
+    ...(plan.cloned_from_id
+      ? [
+          {
+            label: "Source template",
+            value: (
+              <Link to={`/plan-tree/${plan.cloned_from_id}`}>
+                {plan.cloned_from_id}
+              </Link>
+            ),
+          },
+        ]
+      : []),
+    ...(plan.repetition_instance
+      ? [
+          {
+            label: "Repetition instance",
+            value: plan.repetition_instance.instance_index + 1,
+          },
+        ]
+      : []),
     {
       label: "Parent",
       value: plan.parent_id ? (

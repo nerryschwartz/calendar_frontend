@@ -279,6 +279,14 @@ export interface PlanDetailDTO {
   task_detail: TaskPlanDTO | null;
   block_detail: BlockPlanDTO | null;
   repetition_detail: RepetitionPlanDTO | null;
+  clone_status?: "NOT_CLONED" | "LINKED" | "DETACHED";
+  cloned_from_id?: string | null;
+  repetition_instance?: {
+    repetition_plan_id: string;
+    instance_index: number;
+    is_critical: boolean;
+    sort_order: number;
+  } | null;
 }
 
 export interface MasterPlanResponse {

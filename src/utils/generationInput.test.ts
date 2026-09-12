@@ -13,6 +13,7 @@ import {
 import {
   allPendingPlans,
   generatedLinkState,
+  pendingPlans,
   type GenerationEdit,
 } from "./generatedPlans";
 import { removeDraftWithDependents } from "./planDrafts";
@@ -101,4 +102,39 @@ it("derives subtree detachment and removes generated dependencies during regener
     goal,
     child,
   ]);
+});
+
+it("keeps omitted instance roots hidden after partial Save drops their original delete edits", async () => {
+  const batch = await batchFor();
+  const remaining: DraftEdit[] = [{ ...batch, omittedIndices: [0] }];
+  expect(pendingPlans(remaining)).toHaveLength(1);
+  expect(pendingPlans(remaining)[0].generation?.index).toBe(1);
+});
+
+it("builds nested repetition template graphs with canonical subtype and child metadata", async () => {
+  const outer = {
+    ...repetitionCreate,
+    body: { ...repetitionCreate.body, template_type: "GOAL" as const },
+  };
+  const nested = {
+    ...repetitionCreate,
+    draftId: "nested",
+    parentRef: templatePlanRef(draftPlanRef("repeat")),
+  };
+  const batch = await batchFor([outer, nested]);
+  const nodes = batch.preview.input.template.nodes;
+  expect(nodes[0]).toMatchObject({
+    kind: "GOAL",
+    duration_minutes: null,
+    is_critical: null,
+    sort_order: null,
+  });
+  expect(nodes.find((node) => node.ref === "draft:nested")).toMatchObject({
+    kind: "REPETITION",
+    duration_minutes: null,
+    sort_order: 0,
+  });
+  expect(
+    nodes.find((node) => node.ref === "template:draft:nested"),
+  ).toMatchObject({ kind: "TASK", is_critical: null, sort_order: null });
 });

@@ -153,6 +153,11 @@ export function pendingPlans(edits: DraftEdit[]): PendingPlan[] {
       .filter((edit) => edit.type === "delete")
       .map((edit) => planRefKey(edit.planRef)),
   );
+  for (const edit of edits)
+    if (edit.type === "generateInstances")
+      for (const instance of edit.preview.instances)
+        if (edit.omittedIndices?.includes(instance.instance_index))
+          removed.add("draft:" + instance.root_ref);
   let changed = true;
   while (changed) {
     changed = false;

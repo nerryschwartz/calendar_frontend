@@ -373,24 +373,22 @@ export async function applyDraftEdits(
       throw new DraftEditApplyError(
         err,
         appliedCount,
-        edits
-          .slice(appliedCount)
-          .map((pending) =>
-            resolveDraftEditRefs(
-              pending.type === "generateInstances"
-                ? {
-                    ...pending,
-                    appliedEdits: [
-                      ...(pending.appliedEdits ?? []),
-                      ...edits
-                        .slice(0, appliedCount)
-                        .filter((entry) => entry.type !== "generateInstances"),
-                    ],
-                  }
-                : pending,
-              draftPlanIds,
-            ),
+        edits.slice(appliedCount).map((pending) =>
+          resolveDraftEditRefs(
+            pending.type === "generateInstances"
+              ? {
+                  ...pending,
+                  appliedEdits: [
+                    ...(pending.appliedEdits ?? []),
+                    ...edits
+                      .slice(0, appliedCount)
+                      .filter((entry) => entry.type !== "generateInstances"),
+                  ],
+                }
+              : pending,
+            draftPlanIds,
           ),
+        ),
       );
     }
   }

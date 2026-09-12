@@ -16,6 +16,7 @@ import PlanDraftProvider from "../components/PlanDraftProvider";
 import PlanEditControls from "../components/plan/PlanEditControls";
 import { usePlanEditMode } from "../hooks/usePlanEditMode";
 import { planDetail } from "../test/plan";
+import { mockGenerationPreview } from "../test/repetition";
 
 const repeat = (generated = false): PlanDetailDTO =>
   planDetail({
@@ -115,33 +116,34 @@ it("keeps generated date-range end extension editable", () => {
   );
 });
 
-it("[failure_expected] captures current template fields once and does not replay them after uncertain generation", async () => {
-  let generated = false;
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-    const url = String(input);
-    if (url.endsWith("/generate-instances")) {
-      generated = true;
-      throw new Error("Lost response");
-    }
-    const body = url.endsWith("/repeat")
-      ? repeat(generated)
-      : url.endsWith("/template")
-        ? template
-        : url.endsWith("/generation-status")
-          ? {
-              repetitions: [
-                {
-                  plan_id: "repeat",
-                  name: "Lunch",
-                  template_root_id: "template",
-                  generated_at: generated ? "now" : null,
-                  instance_count: generated ? 14 : 0,
-                },
-              ],
-            }
-          : {};
-    return new Response(JSON.stringify(body));
-  });
+it("captures selected template fields into a visible preview queue once across navigation", async () => {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/preview-instances"))
+        return new Response(
+          JSON.stringify(mockGenerationPreview(JSON.parse(String(init?.body)))),
+        );
+      const body = url.endsWith("/repeat")
+        ? repeat()
+        : url.endsWith("/template")
+          ? template
+          : url.endsWith("/generation-status")
+            ? {
+                repetitions: [
+                  {
+                    plan_id: "repeat",
+                    name: "Lunch",
+                    template_root_id: "template",
+                    generated_at: null,
+                    instance_count: 0,
+                  },
+                ],
+              }
+            : {};
+      return new Response(JSON.stringify(body));
+    },
+  );
   vi.stubGlobal("fetch", fetchMock);
   function Harness() {
     const editing = usePlanEditMode();
@@ -188,8 +190,12 @@ it("[failure_expected] captures current template fields once and does not replay
   });
   fireEvent.click(screen.getByText("Generate test"));
   await waitFor(() => expect(screen.getByText("Generate test")).toBeEnabled());
-  expect(editor.getByLabelText("Start")).toHaveValue("");
-  expect(screen.getByText(/Generated 14/)).toBeVisible();
+  expect(
+    within(
+      editor.getByRole("group", { name: "New time window" }),
+    ).getByLabelText("Start"),
+  ).toHaveValue("");
+  expect(screen.getByText(/Queued 14/)).toBeVisible();
   rerender(
     <MemoryRouter>
       <PlanDraftProvider>
@@ -197,24 +203,24 @@ it("[failure_expected] captures current template fields once and does not replay
       </PlanDraftProvider>
     </MemoryRouter>,
   );
-  expect(screen.getByText(/Generated 14/)).toBeVisible();
+  expect(screen.getByText(/Queued 14/)).toBeVisible();
   fireEvent.click(screen.getByText("Generate test"));
   await waitFor(() => expect(screen.getByText("Generate test")).toBeEnabled());
   expect(
     fetchMock.mock.calls.filter(([url]) =>
-      String(url).endsWith("/generate-instances"),
+      String(url).endsWith("/preview-instances"),
     ),
   ).toHaveLength(1);
   expect(
     fetchMock.mock.calls.filter(([url]) =>
       String(url).endsWith("/constraints/groups"),
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
   expect(
     fetchMock.mock.calls.filter(([url]) =>
       String(url).endsWith("/task/scheduling"),
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(0);
 });
 
 it("passes a complete new repetition to preview generation", () => {

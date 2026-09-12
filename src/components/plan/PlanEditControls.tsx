@@ -17,6 +17,7 @@ import { getPlanDetail } from "../../api/plans";
 import {
   pendingPlans,
   generatedLinkState,
+  generatedPlanRef,
   type PendingPlan,
 } from "../../utils/generatedPlans";
 import PlanConstraintsPanel from "./PlanConstraintsPanel";
@@ -567,6 +568,28 @@ function PlanTargetEditor({
       setError(err instanceof Error ? err.message : "Invalid edit");
     }
   };
+  const prerequisites = new Map(
+    (target?.detail?.prerequisites ?? []).map((item) => {
+      const ref = generatedPlanRef(item.prerequisite_plan_id, draftEdits);
+      return [planRefKey(ref), { ref, name: item.name }];
+    }),
+  );
+  for (const edit of draftEdits) {
+    if (!("planRef" in edit) || planRefKey(edit.planRef) !== planRefKey(ref))
+      continue;
+    if (edit.type === "addPrerequisite")
+      prerequisites.set(planRefKey(edit.prerequisitePlanRef), {
+        ref: edit.prerequisitePlanRef,
+        name:
+          pending.find(
+            (item) =>
+              planRefKey(draftPlanRef(item.draftId)) ===
+              planRefKey(edit.prerequisitePlanRef),
+          )?.body.name ?? planRefKey(edit.prerequisitePlanRef),
+      });
+    if (edit.type === "removePrerequisite")
+      prerequisites.delete(planRefKey(edit.prerequisitePlanRef));
+  }
   return (
     <>
       {target?.generation && (
@@ -641,6 +664,28 @@ function PlanTargetEditor({
       {!master && (
         <fieldset>
           <legend>Add prerequisite</legend>
+          {target && prerequisites.size > 0 && (
+            <ul>
+              {[...prerequisites].map(([key, prerequisite]) => (
+                <li key={key}>
+                  {prerequisite.name}{" "}
+                  <button
+                    type="button"
+                    className="btn-text"
+                    onClick={() =>
+                      queueEdit({
+                        type: "removePrerequisite",
+                        planRef: ref,
+                        prerequisitePlanRef: prerequisite.ref,
+                      })
+                    }
+                  >
+                    Queue remove prerequisite
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           <PrerequisitePicker
             pending={pending.filter((item) => item.draftId !== target?.draftId)}
             onSelect={(value) =>
@@ -765,7 +810,7 @@ function PlanTargetEditor({
             draftEdits={draftEdits}
             queueEdit={queueEdit}
           />
-          {target && onGenerate && (
+          {target && !target.generation?.blueprint && onGenerate && (
             <button
               type="button"
               className="btn-primary"
@@ -851,13 +896,33 @@ function TemplateEditor({
         template_block_family: generatedTemplate.body.block_family,
       }
     : pendingOwner?.body;
+  const templateScheduling = (loaded?: PlanDetailDTO) => {
+    let fields: BlockSchedulingBody = loaded?.task_detail ??
+      loaded?.block_detail ?? {
+        duration_minutes: body?.template_duration_minutes,
+        divisible: body?.template_divisible,
+        minimum_chunk_size_minutes: body?.template_minimum_chunk_size_minutes,
+        block_family: body?.template_block_family,
+      };
+    let families = loaded?.task_detail?.allowed_block_families ?? [];
+    for (const edit of draftEdits) {
+      if (
+        !("planRef" in edit) ||
+        !(
+          planRefKey(edit.planRef) === planRefKey(templateRef) ||
+          (edit.planRef.kind === "persisted" &&
+            edit.planRef.planId === loaded?.plan_id)
+        )
+      )
+        continue;
+      if (edit.type === "taskScheduling" || edit.type === "blockScheduling")
+        fields = { ...fields, ...edit.body };
+      if (edit.type === "taskBlockFamilies") families = edit.families;
+    }
+    return schedulingForm(fields, families);
+  };
   const [scheduling, setScheduling] = useState(() =>
-    schedulingForm({
-      duration_minutes: body?.template_duration_minutes,
-      divisible: body?.template_divisible,
-      minimum_chunk_size_minutes: body?.template_minimum_chunk_size_minutes,
-      block_family: body?.template_block_family,
-    }),
+    templateScheduling(generatedTemplate?.detail),
   );
   const [reload, setReload] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -868,12 +933,7 @@ function TemplateEditor({
       .then((plan) => {
         if (!active) return;
         setDetail(plan);
-        setScheduling(
-          schedulingForm(
-            plan.task_detail ?? plan.block_detail ?? {},
-            plan.task_detail?.allowed_block_families,
-          ),
-        );
+        setScheduling(templateScheduling(plan));
         setError(null);
       })
       .catch((err: unknown) => {

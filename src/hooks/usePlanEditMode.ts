@@ -269,7 +269,9 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
       let remaining = all;
       if (existing?.type === "generateInstances") {
         const replacement = removeDraftWithDependents(all, existingIndex);
-        const customized = replacement.length < all.length - 1;
+        const customized =
+          replacement.length < all.length - 1 ||
+          !!existing.omittedIndices?.length;
         if (generationIsFresh(existing, all) && !customized) {
           setSuccessMessage(
             `Already queued ${existing.preview.instances.length} instance(s); nothing saved`,

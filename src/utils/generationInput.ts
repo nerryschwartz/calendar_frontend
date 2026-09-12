@@ -34,6 +34,7 @@ function newNode(
   parent: string | null,
   body: CreateChildBody,
 ): ProjectionNode {
+  const scheduled = body.kind === "TASK" || body.kind === "BLOCK";
   return {
     ref,
     parent_ref: parent,
@@ -41,9 +42,11 @@ function newNode(
     name: body.name,
     is_critical: body.is_critical,
     sort_order: null,
-    duration_minutes: body.duration_minutes ?? null,
-    divisible: body.divisible ?? false,
-    minimum_chunk_size_minutes: body.minimum_chunk_size_minutes ?? null,
+    duration_minutes: scheduled ? (body.duration_minutes ?? null) : null,
+    divisible: scheduled ? (body.divisible ?? false) : false,
+    minimum_chunk_size_minutes: scheduled
+      ? (body.minimum_chunk_size_minutes ?? null)
+      : null,
     block_family: body.block_family ?? "default",
     allowed_block_families: ["default"],
     prerequisite_refs: [],
@@ -58,7 +61,7 @@ function firstTemplate(
   owner: string,
   body: CreateChildBody,
 ): ProjectionNode {
-  return newNode(ref, owner, {
+  const node = newNode(ref, owner, {
     kind: body.template_type ?? "TASK",
     name: body.template_name ?? body.name + " template",
     is_critical: false,
@@ -68,6 +71,8 @@ function firstTemplate(
       body.template_minimum_chunk_size_minutes ?? null,
     block_family: body.template_block_family,
   });
+  node.is_critical = null;
+  return node;
 }
 function fromDetail(detail: PlanDetailDTO): ProjectionNode {
   const node = newNode(
@@ -82,6 +87,7 @@ function fromDetail(detail: PlanDetailDTO): ProjectionNode {
     },
   );
   node.sort_order = detail.goal_sort_order;
+  node.is_critical = detail.goal_is_critical;
   node.allowed_block_families = detail.task_detail?.allowed_block_families
     ?.length
     ? detail.task_detail.allowed_block_families

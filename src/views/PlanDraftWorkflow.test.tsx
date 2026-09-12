@@ -43,7 +43,7 @@ function renderWorkflow() {
 }
 
 describe("plan draft workflow", () => {
-  it("removes the last window as a group and queues its replacement as a new group", async () => {
+  it("[slow] removes the last window as a group and queues its replacement as a new group", async () => {
     vi.mocked(getPlanDetail).mockResolvedValue(
       planDetail({
         time_constraint_groups: [
@@ -91,7 +91,7 @@ describe("plan draft workflow", () => {
       plan: planDetail({ plan_id: "master", name: "Master", is_master: true }),
     });
   });
-  it("queues time constraints and preserves them through route remounts", async () => {
+  it("[slow] queues time constraints and preserves them through route remounts", async () => {
     const user = userEvent.setup();
     renderWorkflow();
     fireEvent.change(await screen.findByLabelText("Start"), {

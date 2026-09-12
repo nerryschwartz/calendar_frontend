@@ -4,6 +4,9 @@ import { draftPlanRef, persistedPlanRef, templatePlanRef } from "../api/types";
 import { usePlanEditMode } from "./usePlanEditMode";
 import { mockGenerationPreview, repetitionCreate } from "../test/repetition";
 import { pendingPlans } from "../utils/generatedPlans";
+import PlanDraftProvider, {
+  useGenerationForm,
+} from "../components/PlanDraftProvider";
 
 beforeEach(() => vi.restoreAllMocks());
 function fixture(fail = false) {
@@ -112,4 +115,29 @@ it("does not duplicate unchanged previews and confirms before replacing omission
       (edit) => edit.type === "generateInstances",
     ),
   ).toHaveLength(1);
+});
+
+it("Save leaves unqueued form fields untouched", async () => {
+  const fetchMock = fixture();
+  const fields = vi.fn(() => []);
+  const { result } = renderHook(
+    () => {
+      const editing = usePlanEditMode();
+      useGenerationForm(persistedPlanRef("other"), fields);
+      return editing;
+    },
+    { wrapper: PlanDraftProvider },
+  );
+  act(() =>
+    result.current.queueEdit({
+      type: "rename",
+      planRef: persistedPlanRef("plan"),
+      name: "Saved name",
+    }),
+  );
+  await act(() => result.current.saveEdits());
+  expect(fields).not.toHaveBeenCalled();
+  expect(
+    fetchMock.mock.calls.some(([url]) => String(url).includes("/other")),
+  ).toBe(false);
 });

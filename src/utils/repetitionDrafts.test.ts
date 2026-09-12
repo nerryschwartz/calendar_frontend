@@ -24,3 +24,12 @@ it("includes persisted template subtree edits and rejects queued deletion", () =
   expect(generationEdits([edit], persistedPlanRef("repeat"), ["template-task"])).toEqual([edit]);
   expect(() => generationEdits([{ type: "delete", planRef: persistedPlanRef("repeat") }], persistedPlanRef("repeat"))).toThrow("deletion");
 });
+it("includes every pending template descendant but not siblings under ordinary draft parents", () => {
+  const parent = create("parent");
+  const repeat = create("repeat", draftPlanRef("parent"), "REPETITION");
+  const group = create("group", templatePlanRef(draftPlanRef("repeat")));
+  const task = create("task", draftPlanRef("group"));
+  const sibling = create("sibling", draftPlanRef("parent"));
+  const edits = [parent, repeat, group, task, sibling];
+  expect(generationEdits(edits, draftPlanRef("repeat"))).toEqual([parent, repeat, group, task]);
+});

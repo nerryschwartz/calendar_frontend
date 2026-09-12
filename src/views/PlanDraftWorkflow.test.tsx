@@ -6,6 +6,7 @@ import { getPlanDetail, getMasterPlan, applyDraftEdits } from "../api/plans";
 import PlanDraftProvider from "../components/PlanDraftProvider";
 import { planDetail } from "../test/plan";
 import PlanTreeView from "./PlanTreeView";
+vi.mock("../api/repetitionReadiness", () => ({ repetitionReadiness: vi.fn(async (edits) => ({ blockers: [], effectiveEdits: edits })) }));
 
 vi.mock("../api/plans", async (original) => ({
   ...(await original<typeof import("../api/plans")>()),

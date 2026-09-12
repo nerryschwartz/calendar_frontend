@@ -1,9 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSharedPlanDrafts } from "../components/PlanDraftProvider";
 import { removeDraftWithDependents } from "../utils/planDrafts";
 import { resolveDraftEditRefs, resolvePlanRefDrafts } from "../utils/planDrafts";
 import { generationEdits } from "../utils/repetitionDrafts";
 import { generateRepetitionInstances, getRepetitionGenerationStatus } from "../api/repetitions";
+import { repetitionReadiness, type GenerationBlocker } from "../api/repetitionReadiness";
 import {
   applyDraftEdits,
   isDraftEditApplyError,
@@ -21,13 +22,14 @@ import {
 } from "../api/types";
 
 interface UsePlanEditModeOptions {
+  onGenerated?: () => void;
   onSaved?: (result: {
     editCount: number;
     refreshResult?: RefreshScheduleResult;
   }) => void;
 }
 
-export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
+export function usePlanEditMode({ onSaved, onGenerated }: UsePlanEditModeOptions = {}) {
   const {
     editMode,
     setEditMode,
@@ -44,6 +46,18 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   const [refreshResult, setRefreshResult] =
     useState<RefreshScheduleResult | null>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [generationBlockers, setGenerationBlockers] = useState<GenerationBlocker[]>([]);
+  const [readinessVersion, setReadinessVersion] = useState(0);
+  useEffect(() => {
+    if (!editMode || saving) return;
+    let active = true;
+    void repetitionReadiness(draftEdits).then(({ blockers }) => {
+      if (active) setGenerationBlockers(blockers);
+    }).catch((err: unknown) => {
+      if (active) setError(isApiError(err) ? err.detail : { errors: [{ code: "READINESS_FAILED", message: err instanceof Error ? err.message : "Could not check repetition readiness", details: {} }] });
+    });
+    return () => { active = false; };
+  }, [draftEdits, editMode, saving, readinessVersion]);
 
   const queueEdit = useCallback((edit: DraftEdit) => {
     setDraftEdits((prev) => [...prev, edit]);
@@ -91,7 +105,10 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     setRefreshResult(null);
     const toSave = draftEdits;
     try {
-      const editCount = await applyDraftEdits(toSave);
+      const readiness = await repetitionReadiness(toSave);
+      setGenerationBlockers(readiness.blockers);
+      if (readiness.blockers.length) throw new Error("Generate instances before saving: " + readiness.blockers.map((item) => item.name).join(", "));
+      const editCount = await applyDraftEdits(readiness.effectiveEdits);
       clearDrafts();
       setEditMode(false);
       setConfirmExit(false);
@@ -213,16 +230,32 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
         }
       }
       const status = await getRepetitionGenerationStatus();
+      const remaining = all.filter((entry) => !completed.has(entry)).map((entry) => resolveDraftEditRefs(entry, resolved));
+      const readiness = await repetitionReadiness(remaining);
+      setGenerationBlockers(readiness.blockers);
       const generated = status.repetitions.find((item) => item.plan_id === selectedId);
-      setSuccessMessage(`Generated ${generated?.instance_count ?? 0} instance(s); applied ${appliedCount} edit(s)`);
-      onSaved?.({ editCount: appliedCount });
+      const message = `Generated ${generated?.instance_count ?? 0} instance(s); applied ${appliedCount} edit(s)`;
+      setSuccessMessage(message);
+      setReadinessVersion((value) => value + 1);
+      onGenerated?.();
+      if (!readiness.blockers.length && !status.repetitions.some((item) => !item.generated_at)) {
+        setRefreshingSchedule(true);
+        try {
+          const refreshed = await refreshSchedule();
+          setRefreshResult(refreshed);
+          setSuccessMessage(message + "; schedule refreshed");
+        } catch (err) {
+          setError(isApiError(err) ? err.detail : { errors: [{ code: "REFRESH_FAILED", message: err instanceof Error ? err.message : "Schedule refresh failed", details: {} }] });
+          setSuccessMessage(message + "; schedule refresh failed");
+        } finally { setRefreshingSchedule(false); }
+      }
       return selectedId;
     } catch (err) {
       const cause = isDraftEditApplyError(err) ? err.cause : err;
       setError(isApiError(cause) ? cause.detail : { errors: [{ code: "GENERATION_FAILED", message: cause instanceof Error ? cause.message : "Generation failed", details: {} }] });
       if (appliedCount) {
         setSuccessMessage(`Applied ${appliedCount} edit(s); remaining edits are queued`);
-        onSaved?.({ editCount: appliedCount });
+        onGenerated?.();
       }
       return selectedId;
     } finally {
@@ -251,6 +284,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     discardAndExit,
     saveEdits,
     generateInstances,
+    generationBlockers,
     cancelExit,
     setError,
     setSuccessMessage,

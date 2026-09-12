@@ -7,7 +7,8 @@ export function editReferences(edit: DraftEdit): PlanRef[] {
 }
 
 export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templateIds: string[] = []): DraftEdit[] {
-  const needed = new Set([planRefKey(repetition), planRefKey(templatePlanRef(repetition)), ...templateIds.map((id) => "persisted:" + id)]);
+  const blueprint = new Set([planRefKey(templatePlanRef(repetition)), ...templateIds.map((id) => "persisted:" + id)]);
+  const needed = new Set([planRefKey(repetition), ...blueprint]);
   const creates = new Map(edits.filter((edit) => edit.type === "createChild").map((edit) => [edit.draftId, edit]));
   const selected = new Set<DraftEdit>();
   const requireDraft = (ref: PlanRef) => {
@@ -16,6 +17,7 @@ export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templat
       if (!creates.has(ref.draftId)) throw new Error("Pending dependency is missing: " + ref.draftId);
       needed.add(planRefKey(ref));
       needed.add(planRefKey(templatePlanRef(ref)));
+      blueprint.add(planRefKey(templatePlanRef(ref)));
     }
   };
   let changed = true;
@@ -23,12 +25,12 @@ export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templat
     changed = false;
     for (const edit of edits) {
       const ref = edit.type === "createChild" ? draftPlanRef(edit.draftId) : edit.planRef;
-      const templateChild = edit.type === "createChild" && needed.has(planRefKey(edit.parentRef)) &&
-        (edit.parentRef.kind === "template" || (edit.parentRef.kind === "persisted" && templateIds.includes(edit.parentRef.planId)));
+      const templateChild = edit.type === "createChild" && blueprint.has(planRefKey(edit.parentRef));
       if (!selected.has(edit) && (needed.has(planRefKey(ref)) || templateChild)) {
         if (edit.type === "delete") throw new Error("Remove the queued deletion before generating this repetition");
         selected.add(edit);
         needed.add(planRefKey(ref));
+        if (templateChild) blueprint.add(planRefKey(ref));
         editReferences(edit).forEach(requireDraft);
         changed = true;
       }

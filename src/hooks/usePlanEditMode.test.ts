@@ -14,6 +14,7 @@ import {
   type RefreshScheduleResult,
 } from "../api/types";
 import { usePlanEditMode } from "./usePlanEditMode";
+import { repetitionReadiness } from "../api/repetitionReadiness";
 
 vi.mock("../api/plans", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/plans")>();
@@ -27,6 +28,7 @@ vi.mock("../api/plans", async (importOriginal) => {
 vi.mock("../api/schedule", () => ({
   refreshSchedule: vi.fn(),
 }));
+vi.mock("../api/repetitionReadiness", () => ({ repetitionReadiness: vi.fn(async (edits) => ({ blockers: [], effectiveEdits: edits })) }));
 
 const applyDraftEditsMock = vi.mocked(applyDraftEdits);
 const validatePlansMock = vi.mocked(validatePlans);
@@ -52,6 +54,15 @@ function deferred<T>() {
 }
 
 describe("usePlanEditMode", () => {
+  it("rechecks tree-wide blockers before Save and leaves edits unapplied", async () => {
+    vi.mocked(repetitionReadiness).mockImplementation(async (edits) => ({ blockers: [{ ref: persistedPlanRef("repeat"), name: "Lunch" }], effectiveEdits: edits }));
+    const { result } = renderHook(() => usePlanEditMode());
+    act(() => result.current.queueEdit({ type: "rename", planRef: persistedPlanRef("other"), name: "Kept" }));
+    await act(() => result.current.saveEdits());
+    expect(applyDraftEdits).not.toHaveBeenCalled();
+    expect(result.current.draftEdits).toHaveLength(1);
+    expect(result.current.error?.errors[0].message).toContain("Lunch");
+  });
   it("removes a creator and its nested dependents while preserving unrelated edits", () => {
     const { result } = renderHook(() => usePlanEditMode());
     act(() => {
@@ -121,6 +132,7 @@ describe("usePlanEditMode", () => {
   });
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(repetitionReadiness).mockImplementation(async (edits) => ({ blockers: [], effectiveEdits: edits }));
     applyDraftEditsMock.mockImplementation(async (edits) => edits.length);
     validatePlansMock.mockResolvedValue({ status: "ok" });
     refreshScheduleMock.mockResolvedValue(refreshResult);

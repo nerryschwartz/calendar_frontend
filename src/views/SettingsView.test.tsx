@@ -17,7 +17,13 @@ const updateSettingsMock = vi.mocked(updateSettings);
 function settings(overrides: Partial<AppSettingsDTO> = {}): AppSettingsDTO {
   return {
     local_timezone: "America/New_York",
-    master_horizon_duration: { years: 1, months: 1, days: 1, hours: 1, minutes: 5 },
+    master_horizon_duration: {
+      years: 1,
+      months: 1,
+      days: 1,
+      hours: 1,
+      minutes: 5,
+    },
     exact_solver_time_limit_seconds: 30,
     exact_solver_model_size_limit: 5000,
     heuristic_enabled: true,
@@ -33,10 +39,14 @@ describe("SettingsView", () => {
     const user = userEvent.setup();
     render(<SettingsView />);
     await screen.findByLabelText("Years");
-    expect(screen.getByText(/Local timezone:/)).toHaveTextContent(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(screen.getByText(/Local timezone:/)).toHaveTextContent(
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
+    );
     expect(screen.queryByLabelText("Local timezone")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(updateSettingsMock.mock.calls[0][0]).not.toHaveProperty("local_timezone");
+    expect(updateSettingsMock.mock.calls[0][0]).not.toHaveProperty(
+      "local_timezone",
+    );
   });
 
   it("keeps invalid numeric input editable and rejects it before saving", async () => {
@@ -105,7 +115,13 @@ describe("SettingsView", () => {
     await waitFor(() => {
       expect(updateSettingsMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          master_horizon_duration: { years: 1, months: 2, days: 3, hours: 4, minutes: 5 },
+          master_horizon_duration: {
+            years: 1,
+            months: 2,
+            days: 3,
+            hours: 4,
+            minutes: 5,
+          },
         }),
       );
     });

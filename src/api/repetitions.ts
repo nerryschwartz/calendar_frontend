@@ -10,7 +10,9 @@ export interface RepetitionGenerationStatus {
   instance_count: number;
 }
 
-export function getRepetitionGenerationStatus(): Promise<{ repetitions: RepetitionGenerationStatus[] }> {
+export function getRepetitionGenerationStatus(): Promise<{
+  repetitions: RepetitionGenerationStatus[];
+}> {
   return apiGet("/api/repetitions/generation-status");
 }
 

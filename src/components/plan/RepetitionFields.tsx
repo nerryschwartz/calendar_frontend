@@ -3,7 +3,11 @@ import { datetimeLocalToIso } from "../../utils/format";
 import { parseNumericInput } from "../../utils/input";
 import LabeledField from "../LabeledField";
 import DurationFields from "../DurationFields";
-import { durationMinutes, splitDuration, type DurationParts } from "../../utils/duration";
+import {
+  durationMinutes,
+  splitDuration,
+  type DurationParts,
+} from "../../utils/duration";
 
 export interface RepetitionForm {
   mode: RepeatMode;
@@ -90,8 +94,12 @@ export default function RepetitionFields({
           onChange={(e) => onChange({ ...value, start: e.target.value })}
         />
       </LabeledField>
-      <DurationFields label="Repeat interval" value={value.interval} disabled={locked}
-        onChange={(interval) => onChange({ ...value, interval })} />
+      <DurationFields
+        label="Repeat interval"
+        value={value.interval}
+        disabled={locked}
+        onChange={(interval) => onChange({ ...value, interval })}
+      />
       {value.mode === "MANUAL_COUNT" ? (
         <LabeledField label="Manual count">
           <input

@@ -1,8 +1,6 @@
 import { Link } from "react-router-dom";
 import type { PlanDetailDTO, RepetitionPlanDTO } from "../../api/types";
-import {
-  refreshRepetition,
-} from "../../api/repetitions";
+import { refreshRepetition } from "../../api/repetitions";
 import DetailGrid from "../DetailGrid";
 import ErrorBanner from "../ErrorBanner";
 import LoadingButton from "../LoadingButton";
@@ -80,7 +78,9 @@ export default function PlanRepetitionPanel({
               void run(
                 () => refreshRepetition(detail.plan_id),
                 "Repetition refreshed",
-              ).then((result) => { if (result) onUpdated(); })
+              ).then((result) => {
+                if (result) onUpdated();
+              })
             }
           >
             Refresh repetition

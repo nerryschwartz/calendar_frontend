@@ -34,15 +34,41 @@ export default function PlanConstraintsPanel({
   const [error, setError] = useState<string | null>(null);
   const canEdit = editMode && !plan.is_master;
   const planRef = targetRef ?? persistedPlanRef(plan.plan_id);
-  useGenerationForm(planRef, () => {
-    if (!startTime && !endTime) return [];
-    if (!Number.isFinite(Date.parse(startTime)) || !Number.isFinite(Date.parse(endTime)) || Date.parse(endTime) <= Date.parse(startTime)) throw new Error("End must be after a valid start time.");
-    return [{ type: "addConstraintGroup", planRef, body: { windows: [{ start_time: datetimeLocalToIso(startTime), end_time: datetimeLocalToIso(endTime) }] } }];
-  }, () => { setStartTime(""); setEndTime(""); });
+  useGenerationForm(
+    planRef,
+    () => {
+      if (!startTime && !endTime) return [];
+      if (
+        !Number.isFinite(Date.parse(startTime)) ||
+        !Number.isFinite(Date.parse(endTime)) ||
+        Date.parse(endTime) <= Date.parse(startTime)
+      )
+        throw new Error("End must be after a valid start time.");
+      return [
+        {
+          type: "addConstraintGroup",
+          planRef,
+          body: {
+            windows: [
+              {
+                start_time: datetimeLocalToIso(startTime),
+                end_time: datetimeLocalToIso(endTime),
+              },
+            ],
+          },
+        },
+      ];
+    },
+    () => {
+      setStartTime("");
+      setEndTime("");
+    },
+  );
   const queued = draftEdits.filter(
     (edit) =>
       "planRef" in edit &&
-      (planRefsEqual(edit.planRef, planRef) || planRefsEqual(edit.planRef, persistedPlanRef(plan.plan_id))),
+      (planRefsEqual(edit.planRef, planRef) ||
+        planRefsEqual(edit.planRef, persistedPlanRef(plan.plan_id))),
   );
   const removedGroups = new Set(
     queued
@@ -68,8 +94,13 @@ export default function PlanConstraintsPanel({
   };
 
   return (
-    <div className="detail-panel">
-      <h3>{title ?? (plan.repetition_detail ? "Whole-series time constraints" : "Time constraints")}</h3>
+    <div className={targetRef ? "template-constraints" : "detail-panel"}>
+      <h3>
+        {title ??
+          (plan.repetition_detail
+            ? "Whole-series time constraints"
+            : "Time constraints")}
+      </h3>
       {error && (
         <p className="error-text" role="alert">
           {error}
@@ -150,10 +181,33 @@ export default function PlanConstraintsPanel({
               </ul>
               {canEdit && group.constraint_kind === "USER" && (
                 <div className="button-row">
-                  {plan.repetition_detail && <button type="button" className="btn-secondary" onClick={() => {
-                    queueEdit({ type: "addConstraintGroup", planRef: templatePlanRef(planRef), body: { windows: windows.map(({ start_time, end_time }) => ({ start_time, end_time })) } });
-                    queueEdit({ type: "removeConstraintGroup", planRef, groupId: group.constraint_group_id });
-                  }}>Move to first-instance template</button>}
+                  {plan.repetition_detail && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => {
+                        queueEdit({
+                          type: "addConstraintGroup",
+                          planRef: templatePlanRef(planRef),
+                          body: {
+                            windows: windows.map(
+                              ({ start_time, end_time }) => ({
+                                start_time,
+                                end_time,
+                              }),
+                            ),
+                          },
+                        });
+                        queueEdit({
+                          type: "removeConstraintGroup",
+                          planRef,
+                          groupId: group.constraint_group_id,
+                        });
+                      }}
+                    >
+                      Move to first-instance template
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="btn-secondary"

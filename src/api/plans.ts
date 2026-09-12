@@ -172,7 +172,10 @@ export function reopenBlock(planId: string): Promise<BlockPlanDTO> {
   return apiPost<BlockPlanDTO>(`/api/plans/${planId}/block/reopen`);
 }
 
-export async function applyDraftEdits(edits: DraftEdit[], onApplied?: (edit: DraftEdit, resolved: Map<string, string>) => void): Promise<number> {
+export async function applyDraftEdits(
+  edits: DraftEdit[],
+  onApplied?: (edit: DraftEdit, resolved: Map<string, string>) => void,
+): Promise<number> {
   let appliedCount = 0;
   const draftPlanIds = new Map<string, string>();
   const templates = new Map<string, string>();
@@ -197,14 +200,18 @@ export async function applyDraftEdits(edits: DraftEdit[], onApplied?: (edit: Dra
     if (ref.kind !== "template" || templates.has(planRefKey(ref))) return;
     await loadTemplate(ref.repetitionRef);
     const detail = await getPlanDetail(resolvePlanRef(ref.repetitionRef));
-    if (!detail.repetition_detail) throw new Error("The template owner is not a repetition");
+    if (!detail.repetition_detail)
+      throw new Error("The template owner is not a repetition");
     templates.set(planRefKey(ref), detail.repetition_detail.template_root_id);
   };
 
   for (const edit of edits) {
     try {
-      await loadTemplate(edit.type === "createChild" ? edit.parentRef : edit.planRef);
-      if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite") await loadTemplate(edit.prerequisitePlanRef);
+      await loadTemplate(
+        edit.type === "createChild" ? edit.parentRef : edit.planRef,
+      );
+      if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite")
+        await loadTemplate(edit.prerequisitePlanRef);
       switch (edit.type) {
         case "rename":
           await renamePlan(resolvePlanRef(edit.planRef), edit.name);

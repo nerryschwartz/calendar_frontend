@@ -1,20 +1,42 @@
-import { draftPlanRef, planRefKey, templatePlanRef, type DraftEdit, type PlanRef } from "../api/types";
+import {
+  draftPlanRef,
+  planRefKey,
+  templatePlanRef,
+  type DraftEdit,
+  type PlanRef,
+} from "../api/types";
 
 export function editReferences(edit: DraftEdit): PlanRef[] {
   if (edit.type === "createChild") return [edit.parentRef];
   return edit.type === "addPrerequisite" || edit.type === "removePrerequisite"
-    ? [edit.planRef, edit.prerequisitePlanRef] : [edit.planRef];
+    ? [edit.planRef, edit.prerequisitePlanRef]
+    : [edit.planRef];
 }
 
-export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templateIds: string[] = []): DraftEdit[] {
-  const blueprint = new Set([planRefKey(templatePlanRef(repetition)), ...templateIds.map((id) => "persisted:" + id)]);
+export function generationEdits(
+  edits: DraftEdit[],
+  repetition: PlanRef,
+  templateIds: string[] = [],
+): DraftEdit[] {
+  const blueprint = new Set([
+    planRefKey(templatePlanRef(repetition)),
+    ...templateIds.map((id) => "persisted:" + id),
+  ]);
   const needed = new Set([planRefKey(repetition), ...blueprint]);
-  const creates = new Map(edits.filter((edit) => edit.type === "createChild").map((edit) => [edit.draftId, edit]));
+  const creates = new Map(
+    edits
+      .filter((edit) => edit.type === "createChild")
+      .map((edit) => [edit.draftId, edit]),
+  );
   const selected = new Set<DraftEdit>();
   const requireDraft = (ref: PlanRef) => {
-    if (ref.kind === "template") { requireDraft(ref.repetitionRef); return; }
+    if (ref.kind === "template") {
+      requireDraft(ref.repetitionRef);
+      return;
+    }
     if (ref.kind === "draft") {
-      if (!creates.has(ref.draftId)) throw new Error("Pending dependency is missing: " + ref.draftId);
+      if (!creates.has(ref.draftId))
+        throw new Error("Pending dependency is missing: " + ref.draftId);
       needed.add(planRefKey(ref));
       needed.add(planRefKey(templatePlanRef(ref)));
       blueprint.add(planRefKey(templatePlanRef(ref)));
@@ -24,10 +46,19 @@ export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templat
   while (changed) {
     changed = false;
     for (const edit of edits) {
-      const ref = edit.type === "createChild" ? draftPlanRef(edit.draftId) : edit.planRef;
-      const templateChild = edit.type === "createChild" && blueprint.has(planRefKey(edit.parentRef));
-      if (!selected.has(edit) && (needed.has(planRefKey(ref)) || templateChild)) {
-        if (edit.type === "delete") throw new Error("Remove the queued deletion before generating this repetition");
+      const ref =
+        edit.type === "createChild" ? draftPlanRef(edit.draftId) : edit.planRef;
+      const templateChild =
+        edit.type === "createChild" &&
+        blueprint.has(planRefKey(edit.parentRef));
+      if (
+        !selected.has(edit) &&
+        (needed.has(planRefKey(ref)) || templateChild)
+      ) {
+        if (edit.type === "delete")
+          throw new Error(
+            "Remove the queued deletion before generating this repetition",
+          );
         selected.add(edit);
         needed.add(planRefKey(ref));
         if (templateChild) blueprint.add(planRefKey(ref));
@@ -41,7 +72,8 @@ export function generationEdits(edits: DraftEdit[], repetition: PlanRef, templat
   const done = new Set<DraftEdit>();
   const visit = (edit: DraftEdit) => {
     if (done.has(edit)) return;
-    if (visiting.has(edit)) throw new Error("Pending plan dependencies contain a cycle");
+    if (visiting.has(edit))
+      throw new Error("Pending plan dependencies contain a cycle");
     visiting.add(edit);
     const visitRef = (ref: PlanRef): void => {
       if (ref.kind === "template") return visitRef(ref.repetitionRef);

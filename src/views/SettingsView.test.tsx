@@ -17,7 +17,7 @@ const updateSettingsMock = vi.mocked(updateSettings);
 function settings(overrides: Partial<AppSettingsDTO> = {}): AppSettingsDTO {
   return {
     local_timezone: "America/New_York",
-    master_horizon_duration_minutes: 525600 + 43200 + 1440 + 60 + 5,
+    master_horizon_duration: { years: 1, months: 1, days: 1, hours: 1, minutes: 5 },
     exact_solver_time_limit_seconds: 30,
     exact_solver_model_size_limit: 5000,
     heuristic_enabled: true,
@@ -28,20 +28,15 @@ function settings(overrides: Partial<AppSettingsDTO> = {}): AppSettingsDTO {
 }
 
 describe("SettingsView", () => {
-  it("normalizes legacy timezone and saves a selected IANA zone", async () => {
+  it("shows the browser timezone without an editable selector", async () => {
     getSettingsMock.mockResolvedValue(settings({ local_timezone: "EST" }));
     const user = userEvent.setup();
     render(<SettingsView />);
-    const zone = await screen.findByLabelText("Local timezone");
-    expect(zone).toHaveValue("America/New_York");
-    expect(
-      screen.getByRole("option", { name: /America\/New_York \(.*UTC/ }),
-    ).toBeVisible();
-    await user.selectOptions(zone, "America/Chicago");
+    await screen.findByLabelText("Years");
+    expect(screen.getByText(/Local timezone:/)).toHaveTextContent(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    expect(screen.queryByLabelText("Local timezone")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Save settings" }));
-    expect(updateSettingsMock).toHaveBeenCalledWith(
-      expect.objectContaining({ local_timezone: "America/Chicago" }),
-    );
+    expect(updateSettingsMock.mock.calls[0][0]).not.toHaveProperty("local_timezone");
   });
 
   it("keeps invalid numeric input editable and rejects it before saving", async () => {
@@ -74,13 +69,12 @@ describe("SettingsView", () => {
     getSettingsMock.mockResolvedValue(settings());
     updateSettingsMock.mockImplementation(async (body) =>
       settings({
-        master_horizon_duration_minutes:
-          body.master_horizon_duration_minutes ?? 0,
+        ...body,
       }),
     );
   });
 
-  it("[slow] round-trips compound master horizon fields to total minutes", async () => {
+  it("[slow] round-trips calendar master horizon parts without flattening", async () => {
     const user = userEvent.setup();
     render(<SettingsView />);
 
@@ -111,7 +105,7 @@ describe("SettingsView", () => {
     await waitFor(() => {
       expect(updateSettingsMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          master_horizon_duration_minutes: 616565,
+          master_horizon_duration: { years: 1, months: 2, days: 3, hours: 4, minutes: 5 },
         }),
       );
     });

@@ -80,9 +80,17 @@ export interface ScheduleStateDTO {
   updated_at: string;
 }
 
+export interface CalendarDuration {
+  years: number;
+  months: number;
+  days: number;
+  hours: number;
+  minutes: number;
+}
+
 export interface AppSettingsDTO {
   local_timezone: string;
-  master_horizon_duration_minutes: number;
+  master_horizon_duration: CalendarDuration;
   exact_solver_time_limit_seconds: number;
   exact_solver_model_size_limit: number;
   heuristic_enabled: boolean;
@@ -92,7 +100,7 @@ export interface AppSettingsDTO {
 
 export interface UpdateSettingsBody {
   local_timezone?: string;
-  master_horizon_duration_minutes?: number;
+  master_horizon_duration?: CalendarDuration;
   exact_solver_time_limit_seconds?: number;
   exact_solver_model_size_limit?: number;
   heuristic_enabled?: boolean;

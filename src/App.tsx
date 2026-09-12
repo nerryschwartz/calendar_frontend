@@ -6,6 +6,7 @@ import {
   useParams,
 } from "react-router-dom";
 import Layout from "./components/Layout";
+import BrowserTimezone from "./components/BrowserTimezone";
 import PlanDraftProvider from "./components/PlanDraftProvider";
 import BlockCalendarView from "./views/BlockCalendarView";
 import CalendarsView from "./views/CalendarsView";
@@ -23,6 +24,7 @@ function PlanTreeDetailRoute() {
 export default function App() {
   return (
     <BrowserRouter>
+      <BrowserTimezone>
       <PlanDraftProvider>
         <Routes>
           <Route element={<Layout />}>
@@ -42,6 +44,7 @@ export default function App() {
           </Route>
         </Routes>
       </PlanDraftProvider>
+      </BrowserTimezone>
     </BrowserRouter>
   );
 }

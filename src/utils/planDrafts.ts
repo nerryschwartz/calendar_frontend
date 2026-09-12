@@ -1,5 +1,6 @@
 import {
   persistedPlanRef,
+  planRefKey,
   templatePlanRef,
   type DraftEdit,
   type PlanRef,
@@ -9,6 +10,8 @@ export function resolvePlanRefDrafts(
   ref: PlanRef,
   resolved: Map<string, string>,
 ): PlanRef {
+  const known = resolved.get(planRefKey(ref));
+  if (known) return persistedPlanRef(known);
   if (ref.kind === "template")
     return templatePlanRef(resolvePlanRefDrafts(ref.repetitionRef, resolved));
   return ref.kind === "draft" && resolved.has(ref.draftId)
@@ -22,6 +25,30 @@ export function resolveDraftEditRefs(
 ): DraftEdit {
   const resolve = (ref: PlanRef): PlanRef =>
     resolvePlanRefDrafts(ref, resolved);
+  if (edit.type === "generateInstances")
+    return {
+      ...edit,
+      planRef: resolve(edit.planRef),
+      sourceRefs: Object.fromEntries(
+        Object.entries(edit.sourceRefs).map(([key, ref]) => [
+          key,
+          resolve(ref),
+        ]),
+      ),
+      resolvedRefs: { ...edit.resolvedRefs, ...Object.fromEntries(resolved) },
+    };
+  if ("groupId" in edit) {
+    return {
+      ...edit,
+      planRef: resolve(edit.planRef),
+      groupId: edit.groupId
+        ? (resolved.get(edit.groupId) ?? edit.groupId)
+        : undefined,
+      ...("windowId" in edit
+        ? { windowId: resolved.get(edit.windowId) ?? edit.windowId }
+        : {}),
+    } as DraftEdit;
+  }
   if (edit.type === "createChild")
     return { ...edit, parentRef: resolve(edit.parentRef) };
   if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite")

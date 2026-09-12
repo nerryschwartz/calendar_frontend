@@ -213,12 +213,22 @@ export async function applyDraftEdits(
       if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite")
         await loadTemplate(edit.prerequisitePlanRef);
       switch (edit.type) {
+        case "generateInstances":
+          throw new Error(
+            "Queued generation must be committed through Save orchestration",
+          );
         case "rename":
           await renamePlan(resolvePlanRef(edit.planRef), edit.name);
           break;
-        case "addConstraintGroup":
-          await addUserConstraintGroup(resolvePlanRef(edit.planRef), edit.body);
+        case "addConstraintGroup": {
+          const group = await addUserConstraintGroup(
+            resolvePlanRef(edit.planRef),
+            edit.body,
+          );
+          if (edit.groupId)
+            draftPlanIds.set(edit.groupId, group.constraint_group_id);
           break;
+        }
         case "repetitionSettings":
           await updateRepetitionSettings(
             resolvePlanRef(edit.planRef),
@@ -226,16 +236,27 @@ export async function applyDraftEdits(
           );
           break;
         case "replaceConstraintWindows":
-          await updateUserConstraintGroup(edit.groupId, edit.body);
+          await updateUserConstraintGroup(
+            draftPlanIds.get(edit.groupId) ?? edit.groupId,
+            edit.body,
+          );
           break;
         case "addConstraintWindow":
-          await addUserWindow(edit.groupId, edit.body);
+          await addUserWindow(
+            draftPlanIds.get(edit.groupId) ?? edit.groupId,
+            edit.body,
+          );
           break;
         case "removeConstraintWindow":
-          await removeUserWindow(edit.groupId, edit.windowId);
+          await removeUserWindow(
+            draftPlanIds.get(edit.groupId) ?? edit.groupId,
+            draftPlanIds.get(edit.windowId) ?? edit.windowId,
+          );
           break;
         case "removeConstraintGroup":
-          await removeUserConstraintGroup(edit.groupId);
+          await removeUserConstraintGroup(
+            draftPlanIds.get(edit.groupId) ?? edit.groupId,
+          );
           break;
         case "createChild":
           draftPlanIds.set(

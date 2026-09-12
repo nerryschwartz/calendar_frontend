@@ -458,6 +458,8 @@ export type DraftEdit =
       baseline: PreviewInput;
       sourceRefs: Record<string, PlanRef>;
       resolvedRefs?: Record<string, string>;
+      appliedEdits?: DraftEdit[];
+      omittedIndices?: number[];
     }
   | { type: "rename"; planRef: PlanRef; name: string }
   | {

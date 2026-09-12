@@ -4,7 +4,7 @@ import type {
 } from "../api/repetitionGeneration";
 import { persistedPlanRef, type DraftEdit } from "../api/types";
 
-export const repetitionCreate: DraftEdit = {
+export const repetitionCreate: Extract<DraftEdit, { type: "createChild" }> = {
   type: "createChild",
   draftId: "repeat",
   parentRef: persistedPlanRef("master"),

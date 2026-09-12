@@ -8,6 +8,8 @@ import {
 } from "./constraints";
 import { resolveDraftEditRefs } from "../utils/planDrafts";
 import { updateRepetitionSettings } from "./repetitions";
+import { commitRepetitionGeneration } from "./repetitionGeneration";
+import { orderSaveEdits } from "../utils/savePlanDrafts";
 import { planRefKey } from "./types";
 import type {
   BlockPlanDTO,
@@ -176,11 +178,18 @@ export async function applyDraftEdits(
   edits: DraftEdit[],
   onApplied?: (edit: DraftEdit, resolved: Map<string, string>) => void,
 ): Promise<number> {
+  edits = orderSaveEdits(edits);
   let appliedCount = 0;
   const draftPlanIds = new Map<string, string>();
+  for (const edit of edits)
+    if (edit.type === "generateInstances")
+      for (const [key, value] of Object.entries(edit.resolvedRefs ?? {}))
+        draftPlanIds.set(key, value);
   const templates = new Map<string, string>();
 
   const resolvePlanRef = (ref: PlanRef): string => {
+    const known = draftPlanIds.get(planRefKey(ref));
+    if (known) return known;
     if (ref.kind === "persisted") return ref.planId;
     if (ref.kind === "template") {
       const id = templates.get(planRefKey(ref));
@@ -203,6 +212,10 @@ export async function applyDraftEdits(
     if (!detail.repetition_detail)
       throw new Error("The template owner is not a repetition");
     templates.set(planRefKey(ref), detail.repetition_detail.template_root_id);
+    draftPlanIds.set(
+      planRefKey(ref),
+      detail.repetition_detail.template_root_id,
+    );
   };
 
   for (const edit of edits) {
@@ -213,10 +226,48 @@ export async function applyDraftEdits(
       if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite")
         await loadTemplate(edit.prerequisitePlanRef);
       switch (edit.type) {
-        case "generateInstances":
-          throw new Error(
-            "Queued generation must be committed through Save orchestration",
+        case "generateInstances": {
+          const resolved_refs: Record<string, string> = {};
+          const required = new Set([
+            edit.preview.input.repetition_ref,
+            ...edit.preview.input.template.nodes.flatMap((node) => [
+              node.ref,
+              ...node.prerequisite_refs,
+              ...(node.immediate_prerequisite_ref
+                ? [node.immediate_prerequisite_ref]
+                : []),
+            ]),
+          ]);
+          for (const [key, source] of Object.entries(edit.sourceRefs)) {
+            if (!required.has(key)) continue;
+            await loadTemplate(source);
+            resolved_refs[key] = resolvePlanRef(source);
+          }
+          resolved_refs[edit.preview.input.repetition_ref] = resolvePlanRef(
+            edit.planRef,
           );
+          const result = await commitRepetitionGeneration(
+            resolvePlanRef(edit.planRef),
+            {
+              preview: edit.preview,
+              resolved_refs,
+              omitted_instance_indices: edit.omittedIndices ?? [],
+            },
+          );
+          for (const [key, value] of Object.entries(
+            result.reference_map.plans,
+          )) {
+            draftPlanIds.set(key, value);
+            draftPlanIds.set("draft:" + key, value);
+          }
+          for (const map of [
+            result.reference_map.groups,
+            result.reference_map.windows,
+          ])
+            for (const [key, value] of Object.entries(map))
+              draftPlanIds.set(key, value);
+          break;
+        }
         case "rename":
           await renamePlan(resolvePlanRef(edit.planRef), edit.name);
           break;
@@ -324,7 +375,22 @@ export async function applyDraftEdits(
         appliedCount,
         edits
           .slice(appliedCount)
-          .map((pending) => resolveDraftEditRefs(pending, draftPlanIds)),
+          .map((pending) =>
+            resolveDraftEditRefs(
+              pending.type === "generateInstances"
+                ? {
+                    ...pending,
+                    appliedEdits: [
+                      ...(pending.appliedEdits ?? []),
+                      ...edits
+                        .slice(0, appliedCount)
+                        .filter((entry) => entry.type !== "generateInstances"),
+                    ],
+                  }
+                : pending,
+              draftPlanIds,
+            ),
+          ),
       );
     }
   }

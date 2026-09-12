@@ -82,9 +82,10 @@ function fromDetail(detail: PlanDetailDTO): ProjectionNode {
     },
   );
   node.sort_order = detail.goal_sort_order;
-  node.allowed_block_families = detail.task_detail?.allowed_block_families ?? [
-    "default",
-  ];
+  node.allowed_block_families = detail.task_detail?.allowed_block_families
+    ?.length
+    ? detail.task_detail.allowed_block_families
+    : ["default"];
   node.prerequisite_refs = detail.prerequisite_plan_ids.map(
     (id) => "persisted:" + id,
   );
@@ -130,6 +131,8 @@ export async function generationBaseline(
       const node = fromDetail(detail);
       nodes.push(node);
       sourceRefs[node.ref] = persistedPlanRef(id);
+      for (const prerequisite of node.prerequisite_refs)
+        sourceRefs[prerequisite] = persistedPlanRef(prerequisite.slice(10));
       for (const child of detail.children) await visit(child.plan_id);
     };
     await visit(detail.repetition_detail.template_root_id);
@@ -316,7 +319,17 @@ export function generationIsFresh(
 ): boolean {
   return (
     semanticInput(
-      generationInput(batch.baseline, { ...batch.sourceRefs }, edits),
+      generationInput(
+        batch.baseline,
+        { ...batch.sourceRefs },
+        [...(batch.appliedEdits ?? []), ...edits].map((edit) => {
+          if (!("groupId" in edit)) return edit;
+          const original = Object.entries(batch.resolvedRefs ?? {}).find(
+            ([, value]) => value === edit.groupId,
+          )?.[0];
+          return original ? { ...edit, groupId: original } : edit;
+        }),
+      ),
     ) === semanticInput(batch.preview.input)
   );
 }

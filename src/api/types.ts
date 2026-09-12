@@ -406,7 +406,17 @@ export interface UserGroupBody {
 }
 
 export type PlanRef =
-  { kind: "persisted"; planId: string } | { kind: "draft"; draftId: string };
+  { kind: "persisted"; planId: string } | { kind: "draft"; draftId: string } |
+  { kind: "template"; repetitionRef: PlanRef };
+
+export function templatePlanRef(repetitionRef: PlanRef): PlanRef {
+  return { kind: "template", repetitionRef };
+}
+
+export function planRefKey(ref: PlanRef): string {
+  return ref.kind === "template" ? "template:" + planRefKey(ref.repetitionRef)
+    : ref.kind === "draft" ? "draft:" + ref.draftId : "persisted:" + ref.planId;
+}
 
 export function persistedPlanRef(planId: string): PlanRef {
   return { kind: "persisted", planId };
@@ -417,10 +427,12 @@ export function draftPlanRef(draftId: string): PlanRef {
 }
 
 export function summarizePlanRef(ref: PlanRef): string {
+  if (ref.kind === "template") return `first instance of ${summarizePlanRef(ref.repetitionRef)}`;
   return ref.kind === "persisted" ? ref.planId : `draft ${ref.draftId}`;
 }
 
 export function planRefsEqual(left: PlanRef, right: PlanRef): boolean {
+  if (left.kind === "template" && right.kind === "template") return planRefsEqual(left.repetitionRef, right.repetitionRef);
   if (left.kind !== right.kind) return false;
   if (left.kind === "persisted" && right.kind === "persisted") {
     return left.planId === right.planId;

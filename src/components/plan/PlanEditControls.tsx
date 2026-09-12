@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   draftPlanRef,
   persistedPlanRef,
+  templatePlanRef,
+  planRefKey,
   type DraftEdit,
   type PlanRef,
   type PlanDetailDTO,
@@ -11,6 +13,8 @@ import {
   type BlockSchedulingBody,
   type UpdateRepetitionSettingsBody,
 } from "../../api/types";
+import { getPlanDetail } from "../../api/plans";
+import PlanConstraintsPanel from "./PlanConstraintsPanel";
 import { datetimeLocalToIso } from "../../utils/format";
 import { parseFamilies, parseNumericInput } from "../../utils/input";
 import PlanSearchInput from "../PlanSearchInput";
@@ -34,8 +38,7 @@ interface Prerequisite {
   ref: PlanRef;
   name: string;
 }
-const keyOf = (ref: PlanRef) =>
-  ref.kind === "draft" ? "draft:" + ref.draftId : "persisted:" + ref.planId;
+const keyOf = planRefKey;
 const refFromKey = (key: string): PlanRef =>
   key.startsWith("draft:")
     ? draftPlanRef(key.slice(6))
@@ -116,6 +119,8 @@ export default function PlanEditControls({
   const [repetition, setRepetition] = useState(() => repetitionForm());
   const [templateKind, setTemplateKind] = useState<"TASK" | "BLOCK">("TASK");
   const [templateName, setTemplateName] = useState("");
+  const [templateStart, setTemplateStart] = useState("");
+  const [templateEnd, setTemplateEnd] = useState("");
   const [templateScheduling, setTemplateScheduling] = useState(() =>
     schedulingForm(),
   );
@@ -181,6 +186,7 @@ export default function PlanEditControls({
         });
       }
       const window = start || end ? parseWindow(start, end) : null;
+      const templateWindow = kind === "REPETITION" && (templateStart || templateEnd) ? parseWindow(templateStart, templateEnd) : null;
       const ref = draftPlanRef("draft-" + crypto.randomUUID());
       if (ref.kind !== "draft") return;
       queueEdit({
@@ -207,6 +213,8 @@ export default function PlanEditControls({
           planRef: ref,
           body: { windows: [window] },
         });
+      if (templateWindow) queueEdit({ type: "addConstraintGroup", planRef: templatePlanRef(ref), body: { windows: [templateWindow] } });
+      if (kind === "REPETITION" && templateKind === "TASK" && parseFamilies(templateScheduling.families).length) queueEdit({ type: "taskBlockFamilies", planRef: templatePlanRef(ref), families: parseFamilies(templateScheduling.families) });
       setKind("GOAL");
       setName("");
       setCritical(false);
@@ -215,6 +223,8 @@ export default function PlanEditControls({
       setRepetition(repetitionForm());
       setTemplateKind("TASK");
       setTemplateName("");
+      setTemplateStart("");
+      setTemplateEnd("");
       setTemplateScheduling(schedulingForm());
       setPrerequisites([]);
       setStart("");
@@ -310,7 +320,7 @@ export default function PlanEditControls({
             <>
               <RepetitionFields value={repetition} onChange={setRepetition} />
               <fieldset>
-                <legend>Repetition template</legend>
+                <legend>First instance template</legend>
                 <LabeledField label="Template kind">
                   <select
                     value={templateKind}
@@ -330,10 +340,11 @@ export default function PlanEditControls({
                 </LabeledField>
                 <SchedulingFields
                   kind={templateKind}
-                  showFamilies={false}
                   value={templateScheduling}
                   onChange={setTemplateScheduling}
                 />
+                <LabeledField label="First instance constraint start"><input type="datetime-local" value={templateStart} onChange={(event) => setTemplateStart(event.target.value)} /></LabeledField>
+                <LabeledField label="First instance constraint end"><input type="datetime-local" value={templateEnd} onChange={(event) => setTemplateEnd(event.target.value)} /></LabeledField>
               </fieldset>
             </>
           )}
@@ -370,14 +381,14 @@ export default function PlanEditControls({
               ))}
             </ul>
           </fieldset>
-          <LabeledField label="Constraint start">
+          <LabeledField label={kind === "REPETITION" ? "Whole-series constraint start" : "Constraint start"}>
             <input
               type="datetime-local"
               value={start}
               onChange={(event) => setStart(event.target.value)}
             />
           </LabeledField>
-          <LabeledField label="Constraint end">
+          <LabeledField label={kind === "REPETITION" ? "Whole-series constraint end" : "Constraint end"}>
             <input
               type="datetime-local"
               value={end}
@@ -600,7 +611,7 @@ function PlanTargetEditor({
         </fieldset>
       )}
       {kind === "REPETITION" && (
-        <fieldset>
+        <><fieldset disabled={!target && !!plan.repetition_detail?.generated_at}>
           <legend>Repetition settings</legend>
           <RepetitionFields value={repetition} onChange={setRepetition} />
           <button
@@ -617,10 +628,12 @@ function PlanTargetEditor({
             Queue repetition settings
           </button>
         </fieldset>
+        <TemplateEditor ownerRef={ref} ownerPlan={plan} pendingOwner={target} draftEdits={draftEdits} queueEdit={queueEdit} />
+        </>
       )}
       {target && (
         <fieldset>
-          <legend>Pending plan time constraint</legend>
+          <legend>{kind === "REPETITION" ? "Whole-series time constraint" : "Pending plan time constraint"}</legend>
           <LabeledField label="Pending constraint start">
             <input
               type="datetime-local"
@@ -652,4 +665,54 @@ function PlanTargetEditor({
       )}
     </>
   );
+}
+
+function TemplateEditor({ ownerRef, ownerPlan, pendingOwner, draftEdits, queueEdit }: {
+  ownerRef: PlanRef; ownerPlan: PlanDetailDTO; pendingOwner?: PendingChild;
+  draftEdits: DraftEdit[]; queueEdit: (edit: DraftEdit) => void;
+}) {
+  const templateRef = templatePlanRef(ownerRef);
+  const [detail, setDetail] = useState<PlanDetailDTO | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const body = pendingOwner?.body;
+  const [scheduling, setScheduling] = useState(() => schedulingForm({
+    duration_minutes: body?.template_duration_minutes,
+    divisible: body?.template_divisible,
+    minimum_chunk_size_minutes: body?.template_minimum_chunk_size_minutes,
+    block_family: body?.template_block_family,
+  }));
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (pendingOwner || !ownerPlan.repetition_detail) return;
+    let active = true;
+    void getPlanDetail(ownerPlan.repetition_detail.template_root_id).then((plan) => {
+      if (!active) return;
+      setDetail(plan);
+      setScheduling(schedulingForm(plan.task_detail ?? plan.block_detail ?? {}, plan.task_detail?.allowed_block_families));
+      setError(null);
+    }).catch((err: unknown) => { if (active) setError(err instanceof Error ? err.message : "Template unavailable"); });
+    return () => { active = false; };
+  }, [pendingOwner, ownerPlan.repetition_detail?.template_root_id, reload]);
+  const kind = pendingOwner?.body.template_type ?? detail?.plan_kind;
+  const templatePlan: PlanDetailDTO = detail ?? {
+    ...ownerPlan, plan_id: "pending-template", plan_kind: kind ?? "TASK", is_master: false,
+    repetition_detail: null, time_constraint_groups: [],
+  };
+  return <fieldset><legend>First instance template</legend>
+    {error && <p role="alert" className="error-text">{error} <button type="button" onClick={() => setReload((value) => value + 1)}>Reload template</button></p>}
+    {(kind === "TASK" || kind === "BLOCK") && <>
+      <SchedulingFields kind={kind} value={scheduling} onChange={setScheduling} />
+      <button type="button" className="btn-secondary" onClick={() => {
+        try {
+          const parsed = parseScheduling(scheduling);
+          if (kind === "BLOCK" && !scheduling.blockFamily.trim()) throw new Error("Block family is required");
+          queueEdit(kind === "TASK" ? { type: "taskScheduling", planRef: templateRef, body: parsed }
+            : { type: "blockScheduling", planRef: templateRef, body: { ...parsed, block_family: scheduling.blockFamily.trim() } });
+          if (kind === "TASK") queueEdit({ type: "taskBlockFamilies", planRef: templateRef, families: parseFamilies(scheduling.families) });
+          setError(null);
+        } catch (err) { setError(err instanceof Error ? err.message : "Invalid template"); }
+      }}>Queue template scheduling</button>
+    </>}
+    {(pendingOwner || detail) && <PlanConstraintsPanel plan={templatePlan} targetRef={templateRef} title="First instance time constraints" editMode draftEdits={draftEdits} queueEdit={queueEdit} />}
+  </fieldset>;
 }

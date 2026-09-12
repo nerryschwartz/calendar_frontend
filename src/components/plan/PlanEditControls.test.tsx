@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   draftPlanRef,
   persistedPlanRef,
+  templatePlanRef,
   type DraftEdit,
   type PlanDetailDTO,
 } from "../../api/types";
@@ -35,6 +36,21 @@ function planDetail(): PlanDetailDTO {
 }
 
 describe("PlanEditControls", () => {
+  it("queues first-instance and whole-series windows on distinct targets", () => {
+    const queueEdit = vi.fn();
+    render(<MemoryRouter><PlanEditControls plan={planDetail()} draftEdits={[]} queueEdit={queueEdit} /></MemoryRouter>);
+    const form = within(screen.getByRole("group", { name: "Create child" }));
+    fireEvent.change(form.getByLabelText("Kind"), { target: { value: "REPETITION" } });
+    fireEvent.change(form.getByLabelText("Name"), { target: { value: "Lunch" } });
+    for (const prefix of ["First instance", "Whole-series"]) {
+      fireEvent.change(form.getByLabelText(prefix + " constraint start"), { target: { value: "2026-09-12T11:00" } });
+      fireEvent.change(form.getByLabelText(prefix + " constraint end"), { target: { value: "2026-09-12T15:00" } });
+    }
+    fireEvent.click(form.getByText("Queue create child"));
+    const ref = draftPlanRef(queueEdit.mock.calls[0][0].draftId);
+    expect(queueEdit.mock.calls[1][0].planRef).toEqual(ref);
+    expect(queueEdit.mock.calls[2][0].planRef).toEqual(templatePlanRef(ref));
+  });
   it("queues persisted repetition settings without immediate API mutation", async () => {
     const user = userEvent.setup();
     const queueEdit = vi.fn();
@@ -63,9 +79,10 @@ describe("PlanEditControls", () => {
         <PlanEditControls plan={plan} draftEdits={[]} queueEdit={queueEdit} />
       </MemoryRouter>,
     );
-    fireEvent.change(screen.getByLabelText("Interval"), {
-      target: { value: "720" },
+    fireEvent.change(screen.getByLabelText("Days"), {
+      target: { value: "0" },
     });
+    fireEvent.change(screen.getByLabelText("Hours"), { target: { value: "12" } });
     await user.click(
       screen.getByRole("button", { name: "Queue repetition settings" }),
     );

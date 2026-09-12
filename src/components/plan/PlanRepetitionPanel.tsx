@@ -41,7 +41,7 @@ export default function PlanRepetitionPanel({
             value: detail.end_time ? formatDateTime(detail.end_time) : "—",
           },
           {
-            label: "Template root",
+            label: "First instance template",
             value: (
               <Link to={`/plan-tree/${detail.template_root_id}`}>
                 {detail.template_root_id}

@@ -1,6 +1,9 @@
 import { useState } from "react";
 import {
   persistedPlanRef,
+  templatePlanRef,
+  planRefsEqual,
+  type PlanRef,
   type DraftEdit,
   type PlanDetailDTO,
   type UserWindowBody,
@@ -13,6 +16,8 @@ interface PlanConstraintsPanelProps {
   editMode: boolean;
   draftEdits: DraftEdit[];
   queueEdit: (edit: DraftEdit) => void;
+  targetRef?: PlanRef;
+  title?: string;
 }
 
 export default function PlanConstraintsPanel({
@@ -20,17 +25,18 @@ export default function PlanConstraintsPanel({
   editMode,
   draftEdits,
   queueEdit,
+  targetRef,
+  title,
 }: PlanConstraintsPanelProps) {
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [error, setError] = useState<string | null>(null);
   const canEdit = editMode && !plan.is_master;
-  const planRef = persistedPlanRef(plan.plan_id);
+  const planRef = targetRef ?? persistedPlanRef(plan.plan_id);
   const queued = draftEdits.filter(
     (edit) =>
       "planRef" in edit &&
-      edit.planRef.kind === "persisted" &&
-      edit.planRef.planId === plan.plan_id,
+      (planRefsEqual(edit.planRef, planRef) || planRefsEqual(edit.planRef, persistedPlanRef(plan.plan_id))),
   );
   const removedGroups = new Set(
     queued
@@ -57,7 +63,7 @@ export default function PlanConstraintsPanel({
 
   return (
     <div className="detail-panel">
-      <h3>Time constraints</h3>
+      <h3>{title ?? (plan.repetition_detail ? "Whole-series time constraints" : "Time constraints")}</h3>
       {error && (
         <p className="error-text" role="alert">
           {error}
@@ -138,6 +144,10 @@ export default function PlanConstraintsPanel({
               </ul>
               {canEdit && group.constraint_kind === "USER" && (
                 <div className="button-row">
+                  {plan.repetition_detail && <button type="button" className="btn-secondary" onClick={() => {
+                    queueEdit({ type: "addConstraintGroup", planRef: templatePlanRef(planRef), body: { windows: windows.map(({ start_time, end_time }) => ({ start_time, end_time })) } });
+                    queueEdit({ type: "removeConstraintGroup", planRef, groupId: group.constraint_group_id });
+                  }}>Move to first-instance template</button>}
                   <button
                     type="button"
                     className="btn-secondary"

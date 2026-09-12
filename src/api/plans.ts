@@ -8,6 +8,7 @@ import {
 } from "./constraints";
 import { resolveDraftEditRefs } from "../utils/planDrafts";
 import { updateRepetitionSettings } from "./repetitions";
+import { planRefKey } from "./types";
 import type {
   BlockPlanDTO,
   CreateChildBody,
@@ -18,6 +19,8 @@ import type {
   PlanDetailDTO,
   PlanSearchResultDTO,
   TaskPlanDTO,
+  RepetitionPlanDTO,
+  GoalPlanDTO,
 } from "./types";
 
 export function getMasterPlan(): Promise<MasterPlanResponse> {
@@ -50,8 +53,8 @@ export function renamePlan(
 export function createChildPlan(
   parentId: string,
   body: CreateChildBody,
-): Promise<PlanDetailDTO> {
-  return apiPost<PlanDetailDTO>(`/api/plans/${parentId}/children`, body);
+): Promise<GoalPlanDTO | TaskPlanDTO | BlockPlanDTO | RepetitionPlanDTO> {
+  return apiPost(`/api/plans/${parentId}/children`, body);
 }
 
 export function movePlan(
@@ -172,9 +175,15 @@ export function reopenBlock(planId: string): Promise<BlockPlanDTO> {
 export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
   let appliedCount = 0;
   const draftPlanIds = new Map<string, string>();
+  const templates = new Map<string, string>();
 
   const resolvePlanRef = (ref: PlanRef): string => {
     if (ref.kind === "persisted") return ref.planId;
+    if (ref.kind === "template") {
+      const id = templates.get(planRefKey(ref));
+      if (!id) throw new Error("First-instance template could not be resolved");
+      return id;
+    }
     const planId = draftPlanIds.get(ref.draftId);
     if (!planId) {
       throw new Error(
@@ -184,8 +193,18 @@ export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
     return planId;
   };
 
+  const loadTemplate = async (ref: PlanRef): Promise<void> => {
+    if (ref.kind !== "template" || templates.has(planRefKey(ref))) return;
+    await loadTemplate(ref.repetitionRef);
+    const detail = await getPlanDetail(resolvePlanRef(ref.repetitionRef));
+    if (!detail.repetition_detail) throw new Error("The template owner is not a repetition");
+    templates.set(planRefKey(ref), detail.repetition_detail.template_root_id);
+  };
+
   for (const edit of edits) {
     try {
+      await loadTemplate(edit.type === "createChild" ? edit.parentRef : edit.planRef);
+      if (edit.type === "addPrerequisite" || edit.type === "removePrerequisite") await loadTemplate(edit.prerequisitePlanRef);
       switch (edit.type) {
         case "rename":
           await renamePlan(resolvePlanRef(edit.planRef), edit.name);

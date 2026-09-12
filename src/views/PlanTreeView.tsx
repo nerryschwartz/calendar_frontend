@@ -71,6 +71,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
     requestExitEditMode,
     discardAndExit,
     saveEdits,
+    generateInstances,
     cancelExit,
     setError,
     setSuccessMessage,
@@ -209,6 +210,8 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
             detail={plan.repetition_detail}
             editMode={editMode}
             onUpdated={() => void loadPlan()}
+            onGenerate={() => void generateInstances(persistedPlanRef(plan.plan_id))}
+            saving={saving}
           />
         )}
 
@@ -226,6 +229,11 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
             plan={plan}
             draftEdits={draftEdits}
             queueEdit={queueEdit}
+            onGenerate={async (ref, edits) => {
+              const id = await generateInstances(ref, edits);
+              if (id && ref.kind === "draft") navigate(`/plan-tree/${id}`);
+              return id;
+            }}
           />
         )}
 

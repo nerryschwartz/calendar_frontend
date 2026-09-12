@@ -1,5 +1,18 @@
-import { apiPatch, apiPost } from "./client";
+import { apiGet, apiPatch, apiPost } from "./client";
 import type { RepetitionPlanDTO, UpdateRepetitionSettingsBody } from "./types";
+
+export interface RepetitionGenerationStatus {
+  plan_id: string;
+  name: string;
+  parent_id: string | null;
+  template_root_id: string;
+  generated_at: string | null;
+  instance_count: number;
+}
+
+export function getRepetitionGenerationStatus(): Promise<{ repetitions: RepetitionGenerationStatus[] }> {
+  return apiGet("/api/repetitions/generation-status");
+}
 
 export function updateRepetitionSettings(
   repetitionId: string,

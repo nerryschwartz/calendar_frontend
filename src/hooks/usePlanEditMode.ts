@@ -1,10 +1,14 @@
 import { useCallback, useState } from "react";
 import { useSharedPlanDrafts } from "../components/PlanDraftProvider";
 import { removeDraftWithDependents } from "../utils/planDrafts";
+import { resolveDraftEditRefs, resolvePlanRefDrafts } from "../utils/planDrafts";
+import { generationEdits } from "../utils/repetitionDrafts";
+import { generateRepetitionInstances, getRepetitionGenerationStatus } from "../api/repetitions";
 import {
   applyDraftEdits,
   isDraftEditApplyError,
   validatePlans,
+  getPlanDetail,
 } from "../api/plans";
 import { refreshSchedule } from "../api/schedule";
 import {
@@ -12,6 +16,8 @@ import {
   type ApiErrorDetail,
   type DraftEdit,
   type RefreshScheduleResult,
+  type PlanRef,
+  planRefKey,
 } from "../api/types";
 
 interface UsePlanEditModeOptions {
@@ -29,6 +35,8 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     setDraftEdits,
     saving,
     setSaving,
+    actionLock,
+    generationForms,
   } = useSharedPlanDrafts();
   const [refreshingSchedule, setRefreshingSchedule] = useState(false);
   const [error, setError] = useState<ApiErrorDetail | null>(null);
@@ -75,7 +83,8 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   }, [clearDrafts]);
 
   const saveEdits = useCallback(async () => {
-    if (draftEdits.length === 0 || saving) return;
+    if (draftEdits.length === 0 || actionLock.current) return;
+    actionLock.current = true;
     setSaving(true);
     setError(null);
     setSuccessMessage(null);
@@ -149,9 +158,78 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
         });
       }
     } finally {
+      actionLock.current = false;
       setSaving(false);
     }
   }, [clearDrafts, draftEdits, onSaved, saving]);
+
+  const generateInstances = async (ref: PlanRef, additions: DraftEdit[] = []): Promise<string | undefined> => {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    setSaving(true);
+    setError(null);
+    setSuccessMessage(null);
+    let appliedCount = 0;
+    let selectedId: string | undefined;
+    try {
+      const templateIds: string[] = [];
+      if (ref.kind === "persisted") {
+        const repetition = (await getPlanDetail(ref.planId)).repetition_detail;
+        if (!repetition) throw new Error("Selected plan is not a repetition");
+        const visit = async (id: string): Promise<void> => {
+          templateIds.push(id);
+          const detail = await getPlanDetail(id);
+          for (const child of detail.children) await visit(child.plan_id);
+        };
+        await visit(repetition.template_root_id);
+      }
+      const forms = [...generationForms.current.values()].filter((form) =>
+        planRefKey(form.ref) === planRefKey(ref) ||
+        (form.ref.kind === "template" && planRefKey(form.ref.repetitionRef) === planRefKey(ref)) ||
+        (form.ref.kind === "persisted" && templateIds.includes(form.ref.planId))
+      );
+      const current = forms.flatMap((form) => form.edits());
+      const all = [...draftEdits, ...additions, ...current];
+      const selected = generationEdits(all, ref, templateIds);
+      setDraftEdits(all);
+      forms.forEach((form) => form.clear());
+      let resolved = new Map<string, string>();
+      const completed = new Set<DraftEdit>();
+      await applyDraftEdits(selected, (edit, ids) => {
+        appliedCount += 1;
+        completed.add(edit);
+        resolved = new Map(ids);
+        setDraftEdits(all.filter((entry) => !completed.has(entry)).map((entry) => resolveDraftEditRefs(entry, resolved)));
+      });
+      const persisted = resolvePlanRefDrafts(ref, resolved);
+      if (persisted.kind !== "persisted") throw new Error("Repetition was not created");
+      selectedId = persisted.planId;
+      const before = await getPlanDetail(selectedId);
+      if (!before.repetition_detail?.generated_at) {
+        try { await generateRepetitionInstances(selectedId); }
+        catch (err) {
+          const observed = await getPlanDetail(selectedId);
+          if (!observed.repetition_detail?.generated_at) throw err;
+        }
+      }
+      const status = await getRepetitionGenerationStatus();
+      const generated = status.repetitions.find((item) => item.plan_id === selectedId);
+      setSuccessMessage(`Generated ${generated?.instance_count ?? 0} instance(s); applied ${appliedCount} edit(s)`);
+      onSaved?.({ editCount: appliedCount });
+      return selectedId;
+    } catch (err) {
+      const cause = isDraftEditApplyError(err) ? err.cause : err;
+      setError(isApiError(cause) ? cause.detail : { errors: [{ code: "GENERATION_FAILED", message: cause instanceof Error ? cause.message : "Generation failed", details: {} }] });
+      if (appliedCount) {
+        setSuccessMessage(`Applied ${appliedCount} edit(s); remaining edits are queued`);
+        onSaved?.({ editCount: appliedCount });
+      }
+      return selectedId;
+    } finally {
+      actionLock.current = false;
+      setSaving(false);
+    }
+  };
 
   const cancelExit = useCallback(() => {
     setConfirmExit(false);
@@ -172,6 +250,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     requestExitEditMode,
     discardAndExit,
     saveEdits,
+    generateInstances,
     cancelExit,
     setError,
     setSuccessMessage,

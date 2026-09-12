@@ -62,14 +62,17 @@ export function parseRepetition(
 export default function RepetitionFields({
   value,
   onChange,
+  locked = false,
 }: {
   value: RepetitionForm;
   onChange: (value: RepetitionForm) => void;
+  locked?: boolean;
 }) {
   return (
     <>
       <LabeledField label="Repeat mode">
         <select
+          disabled={locked}
           value={value.mode}
           onChange={(e) =>
             onChange({ ...value, mode: e.target.value as RepeatMode })
@@ -82,11 +85,12 @@ export default function RepetitionFields({
       <LabeledField label="Start">
         <input
           type="datetime-local"
+          disabled={locked}
           value={value.start}
           onChange={(e) => onChange({ ...value, start: e.target.value })}
         />
       </LabeledField>
-      <DurationFields label="Repeat interval" value={value.interval}
+      <DurationFields label="Repeat interval" value={value.interval} disabled={locked}
         onChange={(interval) => onChange({ ...value, interval })} />
       {value.mode === "MANUAL_COUNT" ? (
         <LabeledField label="Manual count">

@@ -15,6 +15,7 @@ import {
 } from "../../api/types";
 import { getPlanDetail } from "../../api/plans";
 import PlanConstraintsPanel from "./PlanConstraintsPanel";
+import { useGenerationForm } from "../PlanDraftProvider";
 import { datetimeLocalToIso } from "../../utils/format";
 import { parseFamilies, parseNumericInput } from "../../utils/input";
 import PlanSearchInput from "../PlanSearchInput";
@@ -33,6 +34,7 @@ interface Props {
   plan: PlanDetailDTO;
   draftEdits: DraftEdit[];
   queueEdit: (edit: DraftEdit) => void;
+  onGenerate?: (ref: PlanRef, edits?: DraftEdit[]) => Promise<string | undefined>;
 }
 interface Prerequisite {
   ref: PlanRef;
@@ -105,6 +107,7 @@ export default function PlanEditControls({
   plan,
   draftEdits,
   queueEdit,
+  onGenerate,
 }: Props) {
   const pending = draftEdits.filter((edit) => edit.type === "createChild");
   const [targetKey, setTargetKey] = useState("");
@@ -150,9 +153,11 @@ export default function PlanEditControls({
     ? parentKey
     : (parentOptions[0]?.key ?? "");
 
-  const createChild = () => {
+  const createChild = (generate = false) => {
     setError(null);
     try {
+      const additions: DraftEdit[] = [];
+      const queueEdit = (edit: DraftEdit) => additions.push(edit);
       if (!selectedParent) throw new Error("A GOAL parent is required");
       if (!name.trim()) throw new Error("Child name is required");
       const body: CreateChildBody = {
@@ -215,6 +220,8 @@ export default function PlanEditControls({
         });
       if (templateWindow) queueEdit({ type: "addConstraintGroup", planRef: templatePlanRef(ref), body: { windows: [templateWindow] } });
       if (kind === "REPETITION" && templateKind === "TASK" && parseFamilies(templateScheduling.families).length) queueEdit({ type: "taskBlockFamilies", planRef: templatePlanRef(ref), families: parseFamilies(templateScheduling.families) });
+      if (generate && onGenerate) void onGenerate(ref, additions);
+      else additions.forEach((edit) => enqueue(edit));
       setKind("GOAL");
       setName("");
       setCritical(false);
@@ -233,6 +240,7 @@ export default function PlanEditControls({
       setError(err instanceof Error ? err.message : "Invalid child settings");
     }
   };
+  const enqueue = queueEdit;
 
   return (
     <div className="edit-panel">
@@ -258,6 +266,7 @@ export default function PlanEditControls({
         target={target}
         draftEdits={draftEdits}
         queueEdit={queueEdit}
+        onGenerate={onGenerate}
         pending={pending}
       />
       {parentOptions.length > 0 && (
@@ -395,9 +404,10 @@ export default function PlanEditControls({
               onChange={(event) => setEnd(event.target.value)}
             />
           </LabeledField>
-          <button type="button" className="btn-secondary" onClick={createChild}>
+          <button type="button" className="btn-secondary" onClick={() => createChild()}>
             Queue create child
           </button>
+          {kind === "REPETITION" && onGenerate && <button type="button" className="btn-primary" onClick={() => createChild(true)}>Generate instances</button>}
         </fieldset>
       )}
     </div>
@@ -410,6 +420,7 @@ function PlanTargetEditor({
   draftEdits,
   queueEdit,
   pending,
+  onGenerate,
 }: Props & { target?: PendingChild; pending: PendingChild[] }) {
   const ref = target
     ? draftPlanRef(target.draftId)
@@ -443,6 +454,28 @@ function PlanTargetEditor({
   const [start, setStart] = useState("");
   const [end, setEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [repetitionDirty, setRepetitionDirty] = useState(false);
+  const repetitionLocked = !target && !!plan.repetition_detail?.generated_at;
+  const repetitionBody = () => {
+    const body = parseRepetition(repetition);
+    if (repetitionLocked) {
+      delete body.repeat_mode;
+      delete body.start_time;
+      delete body.repeat_interval_minutes;
+    }
+    return body;
+  };
+  useGenerationForm(ref, () => {
+    const edits: DraftEdit[] = [];
+    if (kind !== "REPETITION") return edits;
+    if (repetitionDirty) edits.push({ type: "repetitionSettings", planRef: ref, body: repetitionBody() });
+    if (name.trim() !== initialName) {
+      if (!name.trim()) throw new Error("Name is required");
+      edits.push({ type: "rename", planRef: ref, name: name.trim() });
+    }
+    if (target && (start || end)) edits.push({ type: "addConstraintGroup", planRef: ref, body: { windows: [parseWindow(start, end)] } });
+    return edits;
+  }, () => { setRepetitionDirty(false); setStart(""); setEnd(""); });
   const queue = (build: () => DraftEdit) => {
     setError(null);
     try {
@@ -611,9 +644,9 @@ function PlanTargetEditor({
         </fieldset>
       )}
       {kind === "REPETITION" && (
-        <><fieldset disabled={!target && !!plan.repetition_detail?.generated_at}>
+        <><fieldset>
           <legend>Repetition settings</legend>
-          <RepetitionFields value={repetition} onChange={setRepetition} />
+          <RepetitionFields value={repetition} locked={repetitionLocked} onChange={(value) => { setRepetition(value); setRepetitionDirty(true); }} />
           <button
             type="button"
             className="btn-secondary"
@@ -621,7 +654,7 @@ function PlanTargetEditor({
               queue(() => ({
                 type: "repetitionSettings",
                 planRef: ref,
-                body: parseRepetition(repetition),
+                body: repetitionBody(),
               }))
             }
           >
@@ -629,6 +662,7 @@ function PlanTargetEditor({
           </button>
         </fieldset>
         <TemplateEditor ownerRef={ref} ownerPlan={plan} pendingOwner={target} draftEdits={draftEdits} queueEdit={queueEdit} />
+        {target && onGenerate && <button type="button" className="btn-primary" onClick={() => void onGenerate(ref)}>Generate instances</button>}
         </>
       )}
       {target && (
@@ -682,6 +716,7 @@ function TemplateEditor({ ownerRef, ownerPlan, pendingOwner, draftEdits, queueEd
     block_family: body?.template_block_family,
   }));
   const [reload, setReload] = useState(0);
+  const [dirty, setDirty] = useState(false);
   useEffect(() => {
     if (pendingOwner || !ownerPlan.repetition_detail) return;
     let active = true;
@@ -694,6 +729,16 @@ function TemplateEditor({ ownerRef, ownerPlan, pendingOwner, draftEdits, queueEd
     return () => { active = false; };
   }, [pendingOwner, ownerPlan.repetition_detail?.template_root_id, reload]);
   const kind = pendingOwner?.body.template_type ?? detail?.plan_kind;
+  const templateEdits = (): DraftEdit[] => {
+    if (kind !== "TASK" && kind !== "BLOCK") return [];
+    const parsed = parseScheduling(scheduling);
+    if (kind === "BLOCK" && !scheduling.blockFamily.trim()) throw new Error("Block family is required");
+    return kind === "TASK" ? [
+      { type: "taskScheduling", planRef: templateRef, body: parsed },
+      { type: "taskBlockFamilies", planRef: templateRef, families: parseFamilies(scheduling.families) },
+    ] : [{ type: "blockScheduling", planRef: templateRef, body: { ...parsed, block_family: scheduling.blockFamily.trim() } }];
+  };
+  useGenerationForm(templateRef, () => dirty ? templateEdits() : [], () => setDirty(false));
   const templatePlan: PlanDetailDTO = detail ?? {
     ...ownerPlan, plan_id: "pending-template", plan_kind: kind ?? "TASK", is_master: false,
     repetition_detail: null, time_constraint_groups: [],
@@ -701,14 +746,11 @@ function TemplateEditor({ ownerRef, ownerPlan, pendingOwner, draftEdits, queueEd
   return <fieldset><legend>First instance template</legend>
     {error && <p role="alert" className="error-text">{error} <button type="button" onClick={() => setReload((value) => value + 1)}>Reload template</button></p>}
     {(kind === "TASK" || kind === "BLOCK") && <>
-      <SchedulingFields kind={kind} value={scheduling} onChange={setScheduling} />
+      <SchedulingFields kind={kind} value={scheduling} onChange={(value) => { setScheduling(value); setDirty(true); }} />
       <button type="button" className="btn-secondary" onClick={() => {
         try {
-          const parsed = parseScheduling(scheduling);
-          if (kind === "BLOCK" && !scheduling.blockFamily.trim()) throw new Error("Block family is required");
-          queueEdit(kind === "TASK" ? { type: "taskScheduling", planRef: templateRef, body: parsed }
-            : { type: "blockScheduling", planRef: templateRef, body: { ...parsed, block_family: scheduling.blockFamily.trim() } });
-          if (kind === "TASK") queueEdit({ type: "taskBlockFamilies", planRef: templateRef, families: parseFamilies(scheduling.families) });
+          templateEdits().forEach((edit) => queueEdit(edit));
+          setDirty(false);
           setError(null);
         } catch (err) { setError(err instanceof Error ? err.message : "Invalid template"); }
       }}>Queue template scheduling</button>

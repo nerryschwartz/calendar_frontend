@@ -172,7 +172,7 @@ export function reopenBlock(planId: string): Promise<BlockPlanDTO> {
   return apiPost<BlockPlanDTO>(`/api/plans/${planId}/block/reopen`);
 }
 
-export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
+export async function applyDraftEdits(edits: DraftEdit[], onApplied?: (edit: DraftEdit, resolved: Map<string, string>) => void): Promise<number> {
   let appliedCount = 0;
   const draftPlanIds = new Map<string, string>();
   const templates = new Map<string, string>();
@@ -289,6 +289,7 @@ export async function applyDraftEdits(edits: DraftEdit[]): Promise<number> {
           break;
       }
       appliedCount += 1;
+      onApplied?.(edit, draftPlanIds);
     } catch (err) {
       throw new DraftEditApplyError(
         err,

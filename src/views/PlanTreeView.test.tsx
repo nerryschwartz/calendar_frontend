@@ -131,6 +131,7 @@ describe("PlanTreeView delete save navigation", () => {
         requestExitEditMode: vi.fn(),
         discardAndExit: vi.fn(),
         saveEdits: vi.fn(),
+        generateInstances: vi.fn(),
         cancelExit: vi.fn(),
         setError: vi.fn(),
         setSuccessMessage: vi.fn(),

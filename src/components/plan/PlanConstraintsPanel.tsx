@@ -9,6 +9,7 @@ import {
   type UserWindowBody,
 } from "../../api/types";
 import LabeledField from "../LabeledField";
+import { useGenerationForm } from "../PlanDraftProvider";
 import { datetimeLocalToIso, formatDateTime } from "../../utils/format";
 
 interface PlanConstraintsPanelProps {
@@ -33,6 +34,11 @@ export default function PlanConstraintsPanel({
   const [error, setError] = useState<string | null>(null);
   const canEdit = editMode && !plan.is_master;
   const planRef = targetRef ?? persistedPlanRef(plan.plan_id);
+  useGenerationForm(planRef, () => {
+    if (!startTime && !endTime) return [];
+    if (!Number.isFinite(Date.parse(startTime)) || !Number.isFinite(Date.parse(endTime)) || Date.parse(endTime) <= Date.parse(startTime)) throw new Error("End must be after a valid start time.");
+    return [{ type: "addConstraintGroup", planRef, body: { windows: [{ start_time: datetimeLocalToIso(startTime), end_time: datetimeLocalToIso(endTime) }] } }];
+  }, () => { setStartTime(""); setEndTime(""); });
   const queued = draftEdits.filter(
     (edit) =>
       "planRef" in edit &&

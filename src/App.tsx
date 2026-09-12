@@ -6,6 +6,7 @@ import {
   useParams,
 } from "react-router-dom";
 import Layout from "./components/Layout";
+import BrowserTimezone from "./components/BrowserTimezone";
 import PlanDraftProvider from "./components/PlanDraftProvider";
 import BlockCalendarView from "./views/BlockCalendarView";
 import CalendarsView from "./views/CalendarsView";
@@ -23,25 +24,33 @@ function PlanTreeDetailRoute() {
 export default function App() {
   return (
     <BrowserRouter>
-      <PlanDraftProvider>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Navigate to="/calendars/tasks" replace />} />
-            <Route
-              path="calendars"
-              element={<Navigate to="/calendars/tasks" replace />}
-            />
-            <Route path="calendars/tasks" element={<CalendarsView />} />
-            <Route path="calendars/blocks" element={<BlockCalendarView />} />
-            <Route path="plan-tree" element={<PlanTreeView />} />
-            <Route path="plan-tree/:planId" element={<PlanTreeDetailRoute />} />
-            <Route path="timers" element={<TimersView />} />
-            <Route path="notifications" element={<NotificationsView />} />
-            <Route path="settings" element={<SettingsView />} />
-            <Route path="free-time" element={<FreeTimeView />} />
-          </Route>
-        </Routes>
-      </PlanDraftProvider>
+      <BrowserTimezone>
+        <PlanDraftProvider>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route
+                index
+                element={<Navigate to="/calendars/tasks" replace />}
+              />
+              <Route
+                path="calendars"
+                element={<Navigate to="/calendars/tasks" replace />}
+              />
+              <Route path="calendars/tasks" element={<CalendarsView />} />
+              <Route path="calendars/blocks" element={<BlockCalendarView />} />
+              <Route path="plan-tree" element={<PlanTreeView />} />
+              <Route
+                path="plan-tree/:planId"
+                element={<PlanTreeDetailRoute />}
+              />
+              <Route path="timers" element={<TimersView />} />
+              <Route path="notifications" element={<NotificationsView />} />
+              <Route path="settings" element={<SettingsView />} />
+              <Route path="free-time" element={<FreeTimeView />} />
+            </Route>
+          </Routes>
+        </PlanDraftProvider>
+      </BrowserTimezone>
     </BrowserRouter>
   );
 }

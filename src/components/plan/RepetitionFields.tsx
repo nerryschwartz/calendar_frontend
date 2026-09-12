@@ -2,12 +2,18 @@ import type { RepeatMode, UpdateRepetitionSettingsBody } from "../../api/types";
 import { datetimeLocalToIso } from "../../utils/format";
 import { parseNumericInput } from "../../utils/input";
 import LabeledField from "../LabeledField";
+import DurationFields from "../DurationFields";
+import {
+  durationMinutes,
+  splitDuration,
+  type DurationParts,
+} from "../../utils/duration";
 
 export interface RepetitionForm {
   mode: RepeatMode;
   start: string;
   end: string;
-  interval: string;
+  interval: DurationParts;
   count: string;
   critical: boolean;
 }
@@ -26,7 +32,7 @@ export function repetitionForm(
     mode: body.repeat_mode ?? "MANUAL_COUNT",
     start: localDateTime(body.start_time ?? new Date().toISOString()),
     end: body.end_time ? localDateTime(body.end_time) : "",
-    interval: String(body.repeat_interval_minutes ?? 1440),
+    interval: splitDuration(body.repeat_interval_minutes ?? 1440),
     count: String(body.manual_count ?? 5),
     critical: body.default_instance_critical ?? false,
   };
@@ -46,11 +52,7 @@ export function parseRepetition(
   return {
     repeat_mode: value.mode,
     start_time: datetimeLocalToIso(value.start),
-    repeat_interval_minutes: parseNumericInput(
-      value.interval,
-      "Repeat interval",
-      { min: 1 },
-    ),
+    repeat_interval_minutes: durationMinutes(value.interval),
     manual_count:
       value.mode === "MANUAL_COUNT"
         ? parseNumericInput(value.count, "Manual count", { min: 1 })
@@ -64,14 +66,17 @@ export function parseRepetition(
 export default function RepetitionFields({
   value,
   onChange,
+  locked = false,
 }: {
   value: RepetitionForm;
   onChange: (value: RepetitionForm) => void;
+  locked?: boolean;
 }) {
   return (
     <>
       <LabeledField label="Repeat mode">
         <select
+          disabled={locked}
           value={value.mode}
           onChange={(e) =>
             onChange({ ...value, mode: e.target.value as RepeatMode })
@@ -84,18 +89,17 @@ export default function RepetitionFields({
       <LabeledField label="Start">
         <input
           type="datetime-local"
+          disabled={locked}
           value={value.start}
           onChange={(e) => onChange({ ...value, start: e.target.value })}
         />
       </LabeledField>
-      <LabeledField label="Interval">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value.interval}
-          onChange={(e) => onChange({ ...value, interval: e.target.value })}
-        />
-      </LabeledField>
+      <DurationFields
+        label="Repeat interval"
+        value={value.interval}
+        disabled={locked}
+        onChange={(interval) => onChange({ ...value, interval })}
+      />
       {value.mode === "MANUAL_COUNT" ? (
         <LabeledField label="Manual count">
           <input

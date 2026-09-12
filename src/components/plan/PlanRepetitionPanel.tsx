@@ -1,9 +1,6 @@
 import { Link } from "react-router-dom";
 import type { PlanDetailDTO, RepetitionPlanDTO } from "../../api/types";
-import {
-  generateRepetitionInstances,
-  refreshRepetition,
-} from "../../api/repetitions";
+import { refreshRepetition } from "../../api/repetitions";
 import DetailGrid from "../DetailGrid";
 import ErrorBanner from "../ErrorBanner";
 import LoadingButton from "../LoadingButton";
@@ -15,12 +12,16 @@ interface PlanRepetitionPanelProps {
   detail: RepetitionPlanDTO;
   editMode: boolean;
   onUpdated: () => void;
+  onGenerate: () => void;
+  saving?: boolean;
 }
 
 export default function PlanRepetitionPanel({
   detail,
   editMode,
   onUpdated,
+  onGenerate,
+  saving,
 }: PlanRepetitionPanelProps) {
   const { run, loading, error, successMessage, clearFeedback } =
     useAsyncAction();
@@ -41,7 +42,7 @@ export default function PlanRepetitionPanel({
             value: detail.end_time ? formatDateTime(detail.end_time) : "—",
           },
           {
-            label: "Template root",
+            label: "First instance template",
             value: (
               <Link to={`/plan-tree/${detail.template_root_id}`}>
                 {detail.template_root_id}
@@ -63,14 +64,10 @@ export default function PlanRepetitionPanel({
       {editMode && (
         <div className="button-row">
           <LoadingButton
-            loading={loading}
+            loading={loading || saving}
+            disabled={!!detail.generated_at}
             variant="secondary"
-            onClick={() =>
-              void run(
-                () => generateRepetitionInstances(detail.plan_id),
-                "Instances generated",
-              ).then(onUpdated)
-            }
+            onClick={onGenerate}
           >
             Generate instances
           </LoadingButton>
@@ -81,7 +78,9 @@ export default function PlanRepetitionPanel({
               void run(
                 () => refreshRepetition(detail.plan_id),
                 "Repetition refreshed",
-              ).then(onUpdated)
+              ).then((result) => {
+                if (result) onUpdated();
+              })
             }
           >
             Refresh repetition

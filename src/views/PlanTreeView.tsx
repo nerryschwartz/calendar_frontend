@@ -71,10 +71,13 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
     requestExitEditMode,
     discardAndExit,
     saveEdits,
+    generateInstances,
+    generationBlockers,
     cancelExit,
     setError,
     setSuccessMessage,
   } = usePlanEditMode({
+    onGenerated: () => void loadPlan(),
     onSaved: () => {
       if (
         plan &&
@@ -183,6 +186,37 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
       />
       <ErrorBanner detail={error} onDismiss={() => setError(null)} />
       <RefreshResultPanel result={refreshResult} />
+      {editMode && generationBlockers.length > 0 && (
+        <section
+          className="detail-panel"
+          aria-label="Repetitions awaiting generation"
+        >
+          <h3>Repetitions awaiting generation</h3>
+          <ul className="link-list">
+            {generationBlockers.map((item) => (
+              <li
+                key={
+                  item.ref.kind === "persisted" ? item.ref.planId : item.name
+                }
+              >
+                {item.ref.kind === "persisted" ? (
+                  <Link to={`/plan-tree/${item.ref.planId}`}>{item.name}</Link>
+                ) : (
+                  <span>{item.name} (pending)</span>
+                )}
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={saving}
+                  onClick={() => void generateInstances(item.ref)}
+                >
+                  Generate instances for {item.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <DraftQueuePanel
         edits={draftEdits}
         onRemove={removeDraft}
@@ -209,6 +243,10 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
             detail={plan.repetition_detail}
             editMode={editMode}
             onUpdated={() => void loadPlan()}
+            onGenerate={() =>
+              void generateInstances(persistedPlanRef(plan.plan_id))
+            }
+            saving={saving}
           />
         )}
 
@@ -226,6 +264,11 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
             plan={plan}
             draftEdits={draftEdits}
             queueEdit={queueEdit}
+            onGenerate={async (ref, edits) => {
+              const id = await generateInstances(ref, edits);
+              if (id && ref.kind === "draft") navigate(`/plan-tree/${id}`);
+              return id;
+            }}
           />
         )}
 

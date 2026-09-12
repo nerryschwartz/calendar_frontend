@@ -5,6 +5,7 @@ import { refreshSchedule } from "./schedule";
 import {
   draftPlanRef,
   persistedPlanRef,
+  templatePlanRef,
   type RefreshScheduleResult,
   type DraftEdit,
 } from "./types";
@@ -19,6 +20,42 @@ const refreshResult: RefreshScheduleResult = {
 };
 
 describe("plan draft API calls", () => {
+  it("resolves a first-instance template after a subtype create response", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      const body = url.endsWith("/children")
+        ? { plan_id: "repeat", template_root_id: "template" }
+        : url.endsWith("/repeat")
+          ? { repetition_detail: { template_root_id: "template" } }
+          : {};
+      return new Response(JSON.stringify(body));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await applyDraftEdits([
+      {
+        type: "createChild",
+        draftId: "repeat",
+        parentRef: persistedPlanRef("master"),
+        body: { name: "Lunch", kind: "REPETITION", is_critical: false },
+      },
+      {
+        type: "addConstraintGroup",
+        planRef: templatePlanRef(draftPlanRef("repeat")),
+        body: {
+          windows: [
+            {
+              start_time: "2026-09-12T16:00:00Z",
+              end_time: "2026-09-12T20:00:00Z",
+            },
+          ],
+        },
+      },
+    ]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      expect.stringContaining("/api/plans/template/constraints/groups"),
+      expect.anything(),
+    );
+  });
   it("saves queued repetition settings to the resolved plan", async () => {
     const fetchMock = vi
       .fn()

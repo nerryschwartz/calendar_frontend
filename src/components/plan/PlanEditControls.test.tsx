@@ -35,6 +35,75 @@ function planDetail(): PlanDetailDTO {
 }
 
 describe("PlanEditControls", () => {
+  it("creates a recursive template and exposes pending goal templates as child parents", () => {
+    const queueEdit = vi.fn();
+    const { rerender } = render(
+      <MemoryRouter>
+        <PlanEditControls
+          plan={planDetail()}
+          draftEdits={[]}
+          queueEdit={queueEdit}
+        />
+      </MemoryRouter>,
+    );
+    const form = within(screen.getByRole("group", { name: "Create child" }));
+    fireEvent.change(form.getByLabelText("Kind"), {
+      target: { value: "REPETITION" },
+    });
+    fireEvent.change(form.getByLabelText("Name"), {
+      target: { value: "Outer" },
+    });
+    fireEvent.change(form.getByLabelText("Template kind"), {
+      target: { value: "REPETITION" },
+    });
+    fireEvent.change(form.getAllByLabelText("Template name")[0], {
+      target: { value: "Inner" },
+    });
+    fireEvent.change(form.getAllByLabelText("Template kind")[1], {
+      target: { value: "GOAL" },
+    });
+    fireEvent.change(form.getAllByLabelText("Template name")[1], {
+      target: { value: "Goal template" },
+    });
+    fireEvent.click(form.getByText("Queue create child"));
+    const created = queueEdit.mock.calls[0][0];
+    expect(created.body.template).toMatchObject({
+      kind: "REPETITION",
+      name: "Inner",
+      template: { kind: "GOAL", name: "Goal template" },
+    });
+    expect(created.body).not.toHaveProperty("template_type");
+    rerender(
+      <MemoryRouter>
+        <PlanEditControls
+          plan={planDetail()}
+          draftEdits={[created]}
+          queueEdit={queueEdit}
+        />
+      </MemoryRouter>,
+    );
+    const goalKey = "template:template:draft:" + created.draftId;
+    fireEvent.change(form.getByLabelText("Parent"), {
+      target: { value: goalKey },
+    });
+    fireEvent.change(form.getByLabelText("Name"), {
+      target: { value: "Nested child" },
+    });
+    fireEvent.click(form.getByText("Queue create child"));
+    expect(queueEdit.mock.calls[1][0].parentRef).toEqual({
+      kind: "template",
+      repetitionRef: {
+        kind: "template",
+        repetitionRef: draftPlanRef(created.draftId),
+      },
+    });
+    fireEvent.change(screen.getByLabelText("Edit target"), {
+      target: { value: goalKey },
+    });
+    expect(
+      screen.getByRole("button", { name: "Queue add group" }),
+    ).toBeVisible();
+  });
   it("keeps repetition creation minimal", () => {
     const queueEdit = vi.fn();
     render(
@@ -60,7 +129,7 @@ describe("PlanEditControls", () => {
     expect(queueEdit).toHaveBeenCalledTimes(1);
     expect(queueEdit.mock.calls[0][0].body).toMatchObject({
       kind: "REPETITION",
-      template_divisible: false,
+      template: { kind: "TASK", divisible: false },
     });
   });
   it("hides Master rename and critical creation and clears critical on parent change", () => {

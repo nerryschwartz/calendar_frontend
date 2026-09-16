@@ -14,6 +14,7 @@ import {
   allPendingPlans,
   generatedLinkState,
   pendingPlans,
+  pendingPlanRef,
   type GenerationEdit,
 } from "./generatedPlans";
 import { removeDraftWithDependents } from "./planDrafts";
@@ -65,6 +66,70 @@ it("invalidates semantic template/settings edits and restores freshness when rem
       },
     ]),
   ).toBe(false);
+});
+
+it("projects recursive repetition templates and edits a queued goal-template descendant", async () => {
+  const outer: DraftEdit = {
+    ...repetitionCreate,
+    body: {
+      ...repetitionCreate.body,
+      template: {
+        kind: "REPETITION",
+        name: "Inner",
+        repeat_mode: "MANUAL_COUNT",
+        start_time: "2026-09-16T12:00:00Z",
+        repeat_interval_minutes: 60,
+        manual_count: 2,
+        template: { kind: "GOAL", name: "Inner goal" },
+      },
+    },
+  };
+  const goalRef = templatePlanRef(templatePlanRef(draftPlanRef("repeat")));
+  const child: DraftEdit = {
+    type: "createChild",
+    draftId: "child",
+    parentRef: goalRef,
+    body: {
+      kind: "TASK",
+      name: "Goal task",
+      is_critical: true,
+      duration_minutes: 10,
+    },
+  };
+  const window: DraftEdit = {
+    type: "addConstraintGroup",
+    planRef: draftPlanRef("child"),
+    body: {
+      windows: [
+        {
+          start_time: "2026-09-16T12:00:00Z",
+          end_time: "2026-09-16T12:45:00Z",
+        },
+      ],
+    },
+  };
+  const batch = await batchFor([outer, child, window]);
+  expect(batch.preview.input.template.nodes.map((node) => node.kind)).toEqual([
+    "REPETITION",
+    "GOAL",
+    "TASK",
+  ]);
+  expect(batch.sourceRefs["template:template:draft:repeat"]).toEqual(goalRef);
+  expect(batch.preview.input.template.nodes[2].constraint_groups).toHaveLength(
+    1,
+  );
+  const goal = pendingPlans([outer, child]).find(
+    (item) => item.body.name === "Inner goal",
+  )!;
+  expect(pendingPlanRef(goal)).toEqual(goalRef);
+  expect(removeDraftWithDependents([outer, child, window], 0)).toEqual([]);
+  expect(
+    pendingPlans([
+      outer,
+      child,
+      { type: "delete", planRef: draftPlanRef("repeat") },
+    ]),
+  ).toEqual([]);
 });
 it("derives subtree detachment and removes generated dependencies during regeneration", async () => {
   const goal: DraftEdit = {

@@ -375,6 +375,7 @@ export interface CreateChildBody {
   manual_count?: number | null;
   end_time?: string | null;
   default_instance_critical?: boolean | null;
+  template?: TemplateCreateBody;
   template_type?: PlanKind | null;
   template_name?: string | null;
   template_duration_minutes?: number | null;
@@ -382,6 +383,17 @@ export interface CreateChildBody {
   template_minimum_chunk_size_minutes?: number | null;
   template_block_family?: string | null;
 }
+
+export type TemplateCreateBody = Omit<
+  CreateChildBody,
+  | "is_critical"
+  | "template_type"
+  | "template_name"
+  | "template_duration_minutes"
+  | "template_divisible"
+  | "template_minimum_chunk_size_minutes"
+  | "template_block_family"
+>;
 
 export interface TaskSchedulingBody {
   duration_minutes?: number | null;

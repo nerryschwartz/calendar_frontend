@@ -90,7 +90,12 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   const queueEdit = useCallback((edit: DraftEdit) => {
     if (actionLock.current) return;
     setDraftEdits((prev) => [
-      ...prev,
+      ...prev.filter(
+        (current) =>
+          edit.type !== "reorderChildren" ||
+          current.type !== "reorderChildren" ||
+          planRefKey(current.planRef) !== planRefKey(edit.planRef),
+      ),
       edit.type === "addConstraintGroup"
         ? {
             ...edit,

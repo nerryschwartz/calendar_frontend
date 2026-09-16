@@ -20,6 +20,7 @@ import {
   type GenerationEdit,
 } from "./generatedPlans";
 import { projectConstraintGroups } from "./constraintDrafts";
+import { normalizeChildOrders } from "./goalChildren";
 
 function settings(
   body: CreateChildBody | Partial<ProjectionSettings>,
@@ -204,6 +205,7 @@ export function generationInput(
   sourceRefs: Record<string, PlanRef>,
   edits: DraftEdit[],
 ): PreviewInput {
+  edits = normalizeChildOrders(edits);
   const result = structuredClone(baseline);
   const nodes = result.template.nodes;
   const keyFor = (ref: PlanRef): string => {
@@ -261,6 +263,21 @@ export function generationInput(
     if (edit.type === "move") {
       node.sort_order = edit.position;
       if (edit.isCritical !== undefined) node.is_critical = edit.isCritical;
+    }
+    if (edit.type === "reorderChildren") {
+      for (const [critical, refs] of [
+        [true, edit.criticalRefs],
+        [false, edit.nonCriticalRefs],
+      ] as const)
+        refs.forEach((ref, index) => {
+          const child = nodes.find(
+            (entry) => entry.ref === keyFor(ref) && entry.parent_ref === key,
+          );
+          if (child) {
+            child.is_critical = critical;
+            child.sort_order = index;
+          }
+        });
     }
     if (edit.type === "addPrerequisite") {
       const prerequisite = keyFor(edit.prerequisitePlanRef);

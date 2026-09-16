@@ -490,6 +490,13 @@ export type DraftEdit =
     }
   | { type: "move"; planRef: PlanRef; position: number; isCritical?: boolean }
   | {
+      type: "reorderChildren";
+      planRef: PlanRef;
+      criticalRefs: PlanRef[];
+      nonCriticalRefs: PlanRef[];
+      previousChildRefs: PlanRef[];
+    }
+  | {
       type: "addPrerequisite";
       planRef: PlanRef;
       prerequisitePlanRef: PlanRef;
@@ -579,6 +586,8 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
       return `Create ${edit.body.kind} child "${edit.body.name}"`;
     case "move":
       return `Move to position ${edit.position}${edit.isCritical != null ? ` (critical=${edit.isCritical})` : ""}`;
+    case "reorderChildren":
+      return "Reorder goal children";
     case "addPrerequisite":
       return `Add prerequisite ${summarizePlanRef(edit.prerequisitePlanRef)}`;
     case "removePrerequisite":

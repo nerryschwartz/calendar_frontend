@@ -24,6 +24,7 @@ import {
 } from "../../utils/generatedPlans";
 import PlanConstraintsPanel from "./PlanConstraintsPanel";
 import TemplateFields, { templateForm, parseTemplate } from "./TemplateFields";
+import GoalChildren from "./GoalChildren";
 import { useGenerationForm } from "../PlanDraftProvider";
 import { datetimeLocalToIso } from "../../utils/format";
 import { parseFamilies, parseNumericInput } from "../../utils/input";
@@ -519,7 +520,7 @@ function PlanTargetEditor({
           </button>
         </fieldset>
       )}
-      {!master && (
+      {!master && (plan.repetition_instance || target?.generation?.root) && (
         <fieldset>
           <legend>Move</legend>
           <LabeledField label="Position">
@@ -726,6 +727,22 @@ function PlanTargetEditor({
       )}
       {target && (
         <>
+          {kind === "GOAL" && (
+            <GoalChildren
+              plan={
+                target.detail ?? {
+                  ...plan,
+                  plan_kind: "GOAL",
+                  is_master: false,
+                  children: [],
+                }
+              }
+              parentRef={ref}
+              edits={draftEdits}
+              editMode
+              queueEdit={queueEdit}
+            />
+          )}
           {!target.ref && (
             <button
               type="button"
@@ -789,7 +806,11 @@ function TemplateEditor({
           pendingOwner.detail?.repetition_detail?.template_root_id,
       )
     : undefined;
-  const ref = generated ? pendingPlanRef(generated) : templatePlanRef(ownerRef);
+  const ref = generated
+    ? pendingPlanRef(generated)
+    : detail
+      ? persistedPlanRef(detail.plan_id)
+      : templatePlanRef(ownerRef);
   useEffect(() => {
     if (pendingOwner && pendingOwner.ref?.kind !== "persisted") return;
     const id = ownerPlan.repetition_detail?.template_root_id;

@@ -6,8 +6,10 @@ import {
 } from "../api/types";
 import { editReferences } from "./repetitionDrafts";
 import { allPendingPlans } from "./generatedPlans";
+import { normalizeChildOrders } from "./goalChildren";
 
 export function orderSaveEdits(edits: DraftEdit[]): DraftEdit[] {
+  edits = normalizeChildOrders(edits);
   const producers = new Map<string, DraftEdit>();
   for (const edit of edits) {
     if (edit.type === "createChild")
@@ -32,6 +34,15 @@ export function orderSaveEdits(edits: DraftEdit[]): DraftEdit[] {
     for (const ref of editReferences(edit)) {
       const producer = dependency(ref);
       if (producer && producer !== edit) visit(producer);
+    }
+    if (edit.type === "reorderChildren") {
+      const members = new Set(edit.previousChildRefs.map(planRefKey));
+      for (const candidate of edits)
+        if (
+          candidate.type === "delete" &&
+          members.has(planRefKey(candidate.planRef))
+        )
+          visit(candidate);
     }
     if (edit.type === "generateInstances") {
       const inputRefs = new Set(Object.values(edit.sourceRefs).map(planRefKey));

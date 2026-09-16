@@ -25,6 +25,14 @@ export function resolveDraftEditRefs(
 ): DraftEdit {
   const resolve = (ref: PlanRef): PlanRef =>
     resolvePlanRefDrafts(ref, resolved);
+  if (edit.type === "reorderChildren")
+    return {
+      ...edit,
+      planRef: resolve(edit.planRef),
+      criticalRefs: edit.criticalRefs.map(resolve),
+      nonCriticalRefs: edit.nonCriticalRefs.map(resolve),
+      previousChildRefs: edit.previousChildRefs.map(resolve),
+    };
   if (edit.type === "generateInstances")
     return {
       ...edit,
@@ -99,5 +107,22 @@ export function removeDraftWithDependents(
         );
     });
   }
-  return edits.filter((_, currentIndex) => !excluded.has(currentIndex));
+  return edits
+    .filter((_, currentIndex) => !excluded.has(currentIndex))
+    .map((edit) =>
+      edit.type === "reorderChildren"
+        ? {
+            ...edit,
+            criticalRefs: edit.criticalRefs.filter(
+              (ref) => !referencesRemoved(ref),
+            ),
+            nonCriticalRefs: edit.nonCriticalRefs.filter(
+              (ref) => !referencesRemoved(ref),
+            ),
+            previousChildRefs: edit.previousChildRefs.filter(
+              (ref) => !referencesRemoved(ref),
+            ),
+          }
+        : edit,
+    );
 }

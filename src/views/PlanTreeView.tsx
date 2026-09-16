@@ -17,6 +17,7 @@ import ErrorBanner from "../components/ErrorBanner";
 import LoadingButton from "../components/LoadingButton";
 import PlanConstraintsPanel from "../components/plan/PlanConstraintsPanel";
 import PlanEditControls from "../components/plan/PlanEditControls";
+import GoalChildren from "../components/plan/GoalChildren";
 import PlanRepetitionPanel, {
   PlanDetailSections,
 } from "../components/plan/PlanRepetitionPanel";
@@ -146,7 +147,7 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
           <h2>{plan.name}</h2>
           <p className="muted">
             {plan.plan_kind}
-            {plan.is_master && " · master"}
+            {plan.is_master && " · Master"}
           </p>
         </div>
         <div className="button-row">
@@ -273,30 +274,39 @@ export default function PlanTreeView({ planId }: PlanTreeViewProps) {
           />
         )}
 
-        <div className="detail-panel">
-          <h3>Children</h3>
-          {plan.children.length === 0 ? (
-            <p className="muted">No children.</p>
-          ) : (
-            <ul className="link-list">
-              {plan.children.map((child) => (
-                <li key={child.plan_id}>
-                  <Link to={`/plan-tree/${child.plan_id}`}>
-                    {child.name} ({child.plan_kind})
-                  </Link>
-                  <span className="muted">
-                    {child.goal_is_critical != null &&
-                      (child.goal_is_critical
-                        ? " · critical"
-                        : " · non-critical")}
-                    {child.goal_sort_order != null &&
-                      ` · order ${child.goal_sort_order}`}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        {plan.plan_kind === "GOAL" ? (
+          <GoalChildren
+            plan={plan}
+            edits={draftEdits}
+            editMode={editMode}
+            queueEdit={queueEdit}
+          />
+        ) : (
+          <div className="detail-panel">
+            <h3>Children</h3>
+            {plan.children.length === 0 ? (
+              <p className="muted">No children.</p>
+            ) : (
+              <ul className="link-list">
+                {plan.children.map((child) => (
+                  <li key={child.plan_id}>
+                    <Link to={`/plan-tree/${child.plan_id}`}>
+                      {child.name} ({child.plan_kind})
+                    </Link>
+                    <span className="muted">
+                      {child.goal_is_critical != null &&
+                        (child.goal_is_critical
+                          ? " · critical"
+                          : " · non-critical")}
+                      {child.goal_sort_order != null &&
+                        ` · order ${child.goal_sort_order}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
 
         <div className="detail-panel">
           <h3>Prerequisites</h3>

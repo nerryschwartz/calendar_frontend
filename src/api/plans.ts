@@ -323,6 +323,17 @@ export async function applyDraftEdits(
             edit.isCritical,
           );
           break;
+        case "reorderChildren":
+          for (const ref of [...edit.criticalRefs, ...edit.nonCriticalRefs])
+            await loadTemplate(ref);
+          await apiPut<PlanDetailDTO>(
+            `/api/plans/${resolvePlanRef(edit.planRef)}/children/order`,
+            {
+              critical_child_ids: edit.criticalRefs.map(resolvePlanRef),
+              non_critical_child_ids: edit.nonCriticalRefs.map(resolvePlanRef),
+            },
+          );
+          break;
         case "addPrerequisite":
           await addPrerequisite(
             resolvePlanRef(edit.planRef),

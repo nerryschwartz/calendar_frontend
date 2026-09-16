@@ -203,3 +203,39 @@ it("builds nested repetition template graphs with canonical subtype and child me
     nodes.find((node) => node.ref === "template:draft:nested"),
   ).toMatchObject({ kind: "TASK", is_critical: null, sort_order: null });
 });
+
+it("invalidates generated instances when their goal-template child ordering changes", async () => {
+  const outer = {
+    ...repetitionCreate,
+    body: { ...repetitionCreate.body, template_type: "GOAL" as const },
+  };
+  const goal = templatePlanRef(draftPlanRef("repeat"));
+  const child: DraftEdit = {
+    type: "createChild",
+    draftId: "child",
+    parentRef: goal,
+    body: {
+      kind: "TASK",
+      name: "Task",
+      duration_minutes: 10,
+      is_critical: false,
+    },
+  };
+  const batch = await batchFor([outer, child]);
+  const reorder: DraftEdit = {
+    type: "reorderChildren",
+    planRef: goal,
+    criticalRefs: [draftPlanRef("child")],
+    nonCriticalRefs: [],
+    previousChildRefs: [draftPlanRef("child")],
+  };
+  expect(generationIsFresh(batch, [outer, child, batch, reorder])).toBe(false);
+  const projected = generationInput(batch.baseline, { ...batch.sourceRefs }, [
+    outer,
+    child,
+    reorder,
+  ]);
+  expect(
+    projected.template.nodes.find((node) => node.ref === "draft:child"),
+  ).toMatchObject({ is_critical: true, sort_order: 0 });
+});

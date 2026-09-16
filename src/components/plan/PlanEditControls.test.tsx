@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   draftPlanRef,
   persistedPlanRef,
-  templatePlanRef,
   type DraftEdit,
   type PlanDetailDTO,
 } from "../../api/types";
@@ -36,7 +35,7 @@ function planDetail(): PlanDetailDTO {
 }
 
 describe("PlanEditControls", () => {
-  it("queues first-instance and whole-series windows on distinct targets", () => {
+  it("keeps repetition creation minimal", () => {
     const queueEdit = vi.fn();
     render(
       <MemoryRouter>
@@ -54,18 +53,54 @@ describe("PlanEditControls", () => {
     fireEvent.change(form.getByLabelText("Name"), {
       target: { value: "Lunch" },
     });
-    for (const prefix of ["First instance", "Whole-series"]) {
-      fireEvent.change(form.getByLabelText(prefix + " constraint start"), {
-        target: { value: "2026-09-12T11:00" },
-      });
-      fireEvent.change(form.getByLabelText(prefix + " constraint end"), {
-        target: { value: "2026-09-12T15:00" },
-      });
-    }
+    expect(form.queryByLabelText(/constraint/i)).not.toBeInTheDocument();
+    expect(form.queryByLabelText("Divisible")).not.toBeInTheDocument();
+    expect(form.queryByLabelText("Block families")).not.toBeInTheDocument();
     fireEvent.click(form.getByText("Queue create child"));
-    const ref = draftPlanRef(queueEdit.mock.calls[0][0].draftId);
-    expect(queueEdit.mock.calls[1][0].planRef).toEqual(ref);
-    expect(queueEdit.mock.calls[2][0].planRef).toEqual(templatePlanRef(ref));
+    expect(queueEdit).toHaveBeenCalledTimes(1);
+    expect(queueEdit.mock.calls[0][0].body).toMatchObject({
+      kind: "REPETITION",
+      template_divisible: false,
+    });
+  });
+  it("hides Master rename and critical creation and clears critical on parent change", () => {
+    const queueEdit = vi.fn();
+    const parent: DraftEdit = {
+      type: "createChild",
+      draftId: "parent",
+      parentRef: persistedPlanRef("current-plan-id"),
+      body: { kind: "GOAL", name: "Parent", is_critical: false },
+    };
+    render(
+      <MemoryRouter>
+        <PlanEditControls
+          plan={{ ...planDetail(), name: "Master", is_master: true }}
+          draftEdits={[parent]}
+          queueEdit={queueEdit}
+        />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.queryByRole("group", { name: "Rename" }),
+    ).not.toBeInTheDocument();
+    const form = within(screen.getByRole("group", { name: "Create child" }));
+    expect(form.queryByLabelText("Critical")).not.toBeInTheDocument();
+    fireEvent.change(form.getByLabelText("Parent"), {
+      target: { value: "draft:parent" },
+    });
+    fireEvent.click(form.getByLabelText("Critical"));
+    fireEvent.change(form.getByLabelText("Parent"), {
+      target: { value: "persisted:current-plan-id" },
+    });
+    fireEvent.change(form.getByLabelText("Name"), {
+      target: { value: "Child" },
+    });
+    fireEvent.click(form.getByText("Queue create child"));
+    expect(queueEdit.mock.calls[0][0].body.is_critical).toBe(false);
+    fireEvent.change(form.getByLabelText("Parent"), {
+      target: { value: "draft:parent" },
+    });
+    expect(form.getByLabelText("Critical")).not.toBeChecked();
   });
   it("queues persisted repetition settings without immediate API mutation", async () => {
     const user = userEvent.setup();
@@ -115,79 +150,39 @@ describe("PlanEditControls", () => {
       }),
     );
   });
-  it("queues a complete task child with families, prerequisite and time constraint then resets the form", async () => {
-    const user = userEvent.setup();
+  it("queues an indivisible task then resets the creation form", () => {
     const queueEdit = vi.fn();
-    const prerequisite: DraftEdit = {
-      type: "createChild",
-      draftId: "prerequisite",
-      parentRef: persistedPlanRef("current-plan-id"),
-      body: { kind: "GOAL", name: "First goal", is_critical: false },
-    };
     render(
       <MemoryRouter>
         <PlanEditControls
           plan={planDetail()}
-          draftEdits={[prerequisite]}
+          draftEdits={[]}
           queueEdit={queueEdit}
         />
       </MemoryRouter>,
     );
     const form = within(screen.getByRole("group", { name: "Create child" }));
-    await user.selectOptions(form.getByLabelText("Kind"), "TASK");
+    fireEvent.change(form.getByLabelText("Kind"), {
+      target: { value: "TASK" },
+    });
     fireEvent.change(form.getByLabelText("Name"), {
       target: { value: "New task" },
     });
     fireEvent.change(form.getByLabelText("Duration"), {
       target: { value: "45" },
     });
-    await user.click(form.getByLabelText("Divisible"));
-    fireEvent.change(form.getByLabelText("Min chunk"), {
-      target: { value: "15" },
-    });
-    fireEvent.change(form.getByLabelText("Block families"), {
-      target: { value: "focus, home" },
-    });
-    await user.selectOptions(
-      form.getByLabelText("Pending prerequisite"),
-      "prerequisite",
-    );
-    fireEvent.change(form.getByLabelText("Constraint start"), {
-      target: { value: "2026-09-10T10:00" },
-    });
-    fireEvent.change(form.getByLabelText("Constraint end"), {
-      target: { value: "2026-09-10T11:00" },
-    });
-    await user.click(form.getByRole("button", { name: "Queue create child" }));
-    const created = queueEdit.mock.calls[0][0];
-    expect(created.body).toMatchObject({
+    expect(form.queryByLabelText("Divisible")).not.toBeInTheDocument();
+    expect(form.queryByLabelText("Prerequisite plan")).not.toBeInTheDocument();
+    fireEvent.click(form.getByText("Queue create child"));
+    expect(queueEdit).toHaveBeenCalledTimes(1);
+    expect(queueEdit.mock.calls[0][0].body).toMatchObject({
       kind: "TASK",
       duration_minutes: 45,
-      divisible: true,
-      minimum_chunk_size_minutes: 15,
+      divisible: false,
+      minimum_chunk_size_minutes: null,
     });
-    expect(queueEdit.mock.calls.slice(1).map(([edit]) => edit)).toEqual([
-      {
-        type: "taskBlockFamilies",
-        planRef: draftPlanRef(created.draftId),
-        families: ["focus", "home"],
-      },
-      {
-        type: "addPrerequisite",
-        planRef: draftPlanRef(created.draftId),
-        prerequisitePlanRef: draftPlanRef("prerequisite"),
-      },
-      expect.objectContaining({
-        type: "addConstraintGroup",
-        planRef: draftPlanRef(created.draftId),
-      }),
-    ]);
     expect(form.getByLabelText("Name")).toHaveValue("");
     expect(form.getByLabelText("Kind")).toHaveValue("GOAL");
-    expect(form.getByLabelText("Constraint start")).toHaveValue("");
-    expect(
-      form.queryByText("First goal", { selector: "li" }),
-    ).not.toBeInTheDocument();
   });
 
   it("shows date-range repetition fields and queues the requested range", async () => {

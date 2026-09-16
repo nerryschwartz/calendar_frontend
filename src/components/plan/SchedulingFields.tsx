@@ -44,11 +44,13 @@ export default function SchedulingFields({
   onChange,
   kind,
   showFamilies = true,
+  minimal = false,
 }: {
   value: SchedulingForm;
   onChange: (value: SchedulingForm) => void;
   kind: "TASK" | "BLOCK";
   showFamilies?: boolean;
+  minimal?: boolean;
 }) {
   return (
     <>
@@ -60,25 +62,32 @@ export default function SchedulingFields({
           onChange={(e) => onChange({ ...value, duration: e.target.value })}
         />
       </LabeledField>
-      <label className="checkbox-label">
-        <input
-          type="checkbox"
-          checked={value.divisible}
-          onChange={(e) => onChange({ ...value, divisible: e.target.checked })}
-        />
-        Divisible
-      </label>
-      <LabeledField label="Min chunk">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={value.minChunk}
-          disabled={!value.divisible}
-          onChange={(e) => onChange({ ...value, minChunk: e.target.value })}
-        />
-      </LabeledField>
+      {!minimal && (
+        <>
+          <label className="checkbox-label">
+            <input
+              type="checkbox"
+              checked={value.divisible}
+              onChange={(e) =>
+                onChange({ ...value, divisible: e.target.checked })
+              }
+            />
+            Divisible
+          </label>
+          <LabeledField label="Min chunk">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={value.minChunk}
+              disabled={!value.divisible}
+              onChange={(e) => onChange({ ...value, minChunk: e.target.value })}
+            />
+          </LabeledField>
+        </>
+      )}
       {kind === "TASK" ? (
-        showFamilies && (
+        showFamilies &&
+        !minimal && (
           <LabeledField label="Block families">
             <input
               value={value.families}

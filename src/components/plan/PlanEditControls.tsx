@@ -131,14 +131,9 @@ export default function PlanEditControls({
   const [repetition, setRepetition] = useState(() => repetitionForm());
   const [templateKind, setTemplateKind] = useState<"TASK" | "BLOCK">("TASK");
   const [templateName, setTemplateName] = useState("");
-  const [templateStart, setTemplateStart] = useState("");
-  const [templateEnd, setTemplateEnd] = useState("");
   const [templateScheduling, setTemplateScheduling] = useState(() =>
     schedulingForm(),
   );
-  const [prerequisites, setPrerequisites] = useState<Prerequisite[]>([]);
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
   const [error, setError] = useState<string | null>(null);
   const parentOptions = [
     ...(plan.plan_kind === "GOAL"
@@ -161,6 +156,11 @@ export default function PlanEditControls({
   )
     ? parentKey
     : (parentOptions[0]?.key ?? "");
+  const parentIsMaster =
+    plan.is_master && selectedParent === keyOf(persistedPlanRef(plan.plan_id));
+  useEffect(() => {
+    if (parentIsMaster) setCritical(false);
+  }, [parentIsMaster]);
 
   const createChild = (generate = false) => {
     setError(null);
@@ -172,7 +172,7 @@ export default function PlanEditControls({
       const body: CreateChildBody = {
         kind,
         name: name.trim(),
-        is_critical: critical,
+        is_critical: parentIsMaster ? false : critical,
       };
       if (kind === "TASK" || kind === "BLOCK")
         Object.assign(body, parseScheduling(scheduling));
@@ -199,11 +199,6 @@ export default function PlanEditControls({
               : undefined,
         });
       }
-      const window = start || end ? parseWindow(start, end) : null;
-      const templateWindow =
-        kind === "REPETITION" && (templateStart || templateEnd)
-          ? parseWindow(templateStart, templateEnd)
-          : null;
       const ref = draftPlanRef("draft-" + crypto.randomUUID());
       if (ref.kind !== "draft") return;
       queueEdit({
@@ -212,40 +207,6 @@ export default function PlanEditControls({
         parentRef: refFromKey(selectedParent),
         body,
       });
-      if (kind === "TASK" && parseFamilies(scheduling.families).length)
-        queueEdit({
-          type: "taskBlockFamilies",
-          planRef: ref,
-          families: parseFamilies(scheduling.families),
-        });
-      for (const prerequisite of prerequisites)
-        queueEdit({
-          type: "addPrerequisite",
-          planRef: ref,
-          prerequisitePlanRef: prerequisite.ref,
-        });
-      if (window)
-        queueEdit({
-          type: "addConstraintGroup",
-          planRef: ref,
-          body: { windows: [window] },
-        });
-      if (templateWindow)
-        queueEdit({
-          type: "addConstraintGroup",
-          planRef: templatePlanRef(ref),
-          body: { windows: [templateWindow] },
-        });
-      if (
-        kind === "REPETITION" &&
-        templateKind === "TASK" &&
-        parseFamilies(templateScheduling.families).length
-      )
-        queueEdit({
-          type: "taskBlockFamilies",
-          planRef: templatePlanRef(ref),
-          families: parseFamilies(templateScheduling.families),
-        });
       if (generate && onGenerate) void onGenerate(ref, additions);
       else additions.forEach((edit) => enqueue(edit));
       setKind("GOAL");
@@ -256,12 +217,7 @@ export default function PlanEditControls({
       setRepetition(repetitionForm());
       setTemplateKind("TASK");
       setTemplateName("");
-      setTemplateStart("");
-      setTemplateEnd("");
       setTemplateScheduling(schedulingForm());
-      setPrerequisites([]);
-      setStart("");
-      setEnd("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid child settings");
     }
@@ -340,16 +296,19 @@ export default function PlanEditControls({
               onChange={(event) => setName(event.target.value)}
             />
           </LabeledField>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={critical}
-              onChange={(event) => setCritical(event.target.checked)}
-            />
-            Critical
-          </label>
+          {!parentIsMaster && (
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={critical}
+                onChange={(event) => setCritical(event.target.checked)}
+              />
+              Critical
+            </label>
+          )}
           {(kind === "TASK" || kind === "BLOCK") && (
             <SchedulingFields
+              minimal
               kind={kind}
               value={scheduling}
               onChange={setScheduling}
@@ -378,86 +337,14 @@ export default function PlanEditControls({
                   />
                 </LabeledField>
                 <SchedulingFields
+                  minimal
                   kind={templateKind}
                   value={templateScheduling}
                   onChange={setTemplateScheduling}
                 />
-                <LabeledField label="First instance constraint start">
-                  <input
-                    type="datetime-local"
-                    value={templateStart}
-                    onChange={(event) => setTemplateStart(event.target.value)}
-                  />
-                </LabeledField>
-                <LabeledField label="First instance constraint end">
-                  <input
-                    type="datetime-local"
-                    value={templateEnd}
-                    onChange={(event) => setTemplateEnd(event.target.value)}
-                  />
-                </LabeledField>
               </fieldset>
             </>
           )}
-          <fieldset>
-            <legend>Child prerequisites</legend>
-            <PrerequisitePicker
-              pending={pending}
-              onSelect={(value) =>
-                setPrerequisites((current) =>
-                  current.some((item) => keyOf(item.ref) === keyOf(value.ref))
-                    ? current
-                    : [...current, value],
-                )
-              }
-            />
-            <ul>
-              {prerequisites.map((item) => (
-                <li key={keyOf(item.ref)}>
-                  {item.name}
-                  <button
-                    type="button"
-                    className="btn-text"
-                    onClick={() =>
-                      setPrerequisites((current) =>
-                        current.filter(
-                          (value) => keyOf(value.ref) !== keyOf(item.ref),
-                        ),
-                      )
-                    }
-                  >
-                    Remove prerequisite
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
-          <LabeledField
-            label={
-              kind === "REPETITION"
-                ? "Whole-series constraint start"
-                : "Constraint start"
-            }
-          >
-            <input
-              type="datetime-local"
-              value={start}
-              onChange={(event) => setStart(event.target.value)}
-            />
-          </LabeledField>
-          <LabeledField
-            label={
-              kind === "REPETITION"
-                ? "Whole-series constraint end"
-                : "Constraint end"
-            }
-          >
-            <input
-              type="datetime-local"
-              value={end}
-              onChange={(event) => setEnd(event.target.value)}
-            />
-          </LabeledField>
           <button
             type="button"
             className="btn-secondary"
@@ -603,27 +490,29 @@ function PlanTargetEditor({
           {error}
         </p>
       )}
-      <fieldset>
-        <legend>Rename</legend>
-        <LabeledField label="Name">
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </LabeledField>
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={() =>
-            queue(() => {
-              if (!name.trim()) throw new Error("Name is required");
-              return { type: "rename", planRef: ref, name: name.trim() };
-            })
-          }
-        >
-          Queue rename
-        </button>
-      </fieldset>
+      {!master && (
+        <fieldset>
+          <legend>Rename</legend>
+          <LabeledField label="Name">
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </LabeledField>
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() =>
+              queue(() => {
+                if (!name.trim()) throw new Error("Name is required");
+                return { type: "rename", planRef: ref, name: name.trim() };
+              })
+            }
+          >
+            Queue rename
+          </button>
+        </fieldset>
+      )}
       {!master && (
         <fieldset>
           <legend>Move</legend>

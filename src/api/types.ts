@@ -6,7 +6,7 @@ export type RepeatMode = "MANUAL_COUNT" | "DATE_RANGE";
 export type CalendarEntryType = "TASK" | "FREE_TIME";
 export type TimerSourceKind = "TASK" | "BLOCK" | "FREE_TIME";
 export type NotificationSourceKind = "TASK" | "BLOCK";
-export type SolverStatus = "OPTIMAL" | "FEASIBLE" | "INFEASIBLE";
+export type SolverStatus = "OPTIMAL" | "FEASIBLE" | "INFEASIBLE" | "UNKNOWN";
 export type FreeTimeWeekStartDay =
   | "MONDAY"
   | "TUESDAY"
@@ -38,6 +38,33 @@ export interface AssignmentConflict {
   explanation: string;
   is_global: boolean;
   is_approximate: boolean;
+  diagnostics?: AssignmentDiagnostics | null;
+}
+
+export interface AssignmentDiagnostics {
+  tasks: {
+    plan_id: string;
+    name: string;
+    duration_minutes: number;
+    divisible: boolean;
+    minimum_chunk_size_minutes: number | null;
+    allowed_block_families: string[];
+  }[];
+  constraint_sources: {
+    plan_id: string;
+    name: string;
+    constraint_kind: ConstraintKind;
+    constraint_group_id: string;
+    windows: UserWindowBody[];
+  }[];
+  effective_windows: { plan_id: string; windows: UserWindowBody[] }[];
+  blocking_plans: { plan_id: string; name: string }[];
+  solver: {
+    stage: string;
+    estimate: number | null;
+    limit: number | null;
+    proof_status: "proven_infeasible" | "not_proven";
+  };
 }
 
 export interface AssignmentResult {
@@ -573,6 +600,9 @@ export function getAssignmentConflicts(
   if (Array.isArray(assignment.conflicts)) {
     return assignment.conflicts;
   }
+  const refresh = value as RefreshScheduleResult;
+  if (Array.isArray(refresh.assignment?.conflicts))
+    return refresh.assignment.conflicts;
   return [];
 }
 

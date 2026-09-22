@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import SchedulingDiagnostics, { SolverOutcome } from "./SchedulingDiagnostics";
 import { getConflictSuggestions } from "../api/deletion";
 import {
   getAssignmentConflicts,
   isApiError,
   type ApiErrorDetail,
   type AssignmentConflict,
+  type AssignmentResult,
+  type RefreshScheduleResult,
 } from "../api/types";
 
 interface ErrorBannerProps {
@@ -21,6 +23,14 @@ export default function ErrorBanner({ detail, onDismiss }: ErrorBannerProps) {
   if (!detail) return null;
 
   const conflicts = getAssignmentConflicts(detail);
+  const value = detail.value as
+    Partial<AssignmentResult & RefreshScheduleResult> | undefined;
+  const stages =
+    value && typeof value === "object"
+      ? [value, value.assignment, value.block_assignment].filter(
+          (stage) => stage?.optimization_status,
+        )
+      : [];
 
   const loadSuggestions = async (conflict: AssignmentConflict) => {
     setSuggestionsLoading(true);
@@ -64,21 +74,37 @@ export default function ErrorBanner({ detail, onDismiss }: ErrorBannerProps) {
           </li>
         ))}
       </ul>
+      {stages.map((stage, index) => (
+        <div key={index}>
+          <SolverOutcome status={stage!.optimization_status!} />
+          {!!stage!.warnings?.length && (
+            <ul>
+              {stage!.warnings.map((warning, index) => (
+                <li key={index}>
+                  <code>{warning.code}</code>: {warning.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
       {conflicts.length > 0 && (
         <div className="conflicts">
           <strong>Assignment conflicts</strong>
           <ul>
             {conflicts.map((conflict, index) => (
               <li key={index}>
-                <ConflictItem conflict={conflict} />
-                <button
-                  type="button"
-                  className="btn-secondary btn-small"
-                  disabled={suggestionsLoading}
-                  onClick={() => void loadSuggestions(conflict)}
-                >
-                  Get conflict suggestions
-                </button>
+                <SchedulingDiagnostics conflict={conflict} />
+                {conflict.diagnostics?.solver.proof_status !== "not_proven" && (
+                  <button
+                    type="button"
+                    className="btn-secondary btn-small"
+                    disabled={suggestionsLoading}
+                    onClick={() => void loadSuggestions(conflict)}
+                  >
+                    Get conflict suggestions
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -91,43 +117,6 @@ export default function ErrorBanner({ detail, onDismiss }: ErrorBannerProps) {
             </ul>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function ConflictItem({ conflict }: { conflict: AssignmentConflict }) {
-  return (
-    <div>
-      <p>{conflict.explanation || "Scheduling conflict"}</p>
-      {conflict.reason_code && (
-        <p className="muted">
-          Reason: <code>{conflict.reason_code}</code>
-          {conflict.is_global && " · global"}
-          {conflict.is_approximate && " · approximate"}
-        </p>
-      )}
-      {conflict.conflicting_plan_ids.length > 0 && (
-        <p>
-          Plans:{" "}
-          {conflict.conflicting_plan_ids.map((id, i) => (
-            <span key={id}>
-              {i > 0 && ", "}
-              <Link to={`/plan-tree/${id}`}>{id}</Link>
-            </span>
-          ))}
-        </p>
-      )}
-      {conflict.task_ids.length > 0 && (
-        <p className="muted">Tasks: {conflict.task_ids.join(", ")}</p>
-      )}
-      {conflict.affected_priority_by_plan_id.length > 0 && (
-        <p className="muted">
-          Priorities:{" "}
-          {conflict.affected_priority_by_plan_id
-            .map(([id, p]) => `${id}=${p}`)
-            .join(", ")}
-        </p>
       )}
     </div>
   );

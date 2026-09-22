@@ -20,8 +20,16 @@ export function useCalendarRefresh() {
     try {
       const result = await refreshSchedule();
       setRefreshResult(result);
+      const statuses = [
+        result.assignment?.optimization_status,
+        result.block_assignment?.optimization_status,
+      ];
       setSuccessMessage(
-        `Schedule refreshed at ${new Date(result.run_started_at).toLocaleString()}`,
+        statuses.includes("UNKNOWN")
+          ? "Scheduling stopped without proving feasibility or infeasibility"
+          : statuses.includes("INFEASIBLE")
+            ? "Scheduling found no feasible calendar"
+            : `Schedule refreshed at ${new Date(result.run_started_at).toLocaleString()}`,
       );
       return result;
     } catch (err) {

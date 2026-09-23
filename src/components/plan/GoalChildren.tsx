@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { GripVertical } from "lucide-react";
+import { ArrowDown, ArrowRightLeft, ArrowUp, GripVertical } from "lucide-react";
 import { DragDropProvider, useDroppable } from "@dnd-kit/react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { move } from "@dnd-kit/helpers";
@@ -15,20 +15,29 @@ import {
 } from "../../api/types";
 
 type Groups = { critical: string[]; noncritical: string[] };
+type GroupId = keyof Groups;
+type KeyboardMove = "up" | "down" | "toggle";
 
 function ChildRow({
   child,
   index,
   group,
   disabled,
+  itemCount,
+  canChangeCritical,
+  onKeyboardMove,
 }: {
   child: GoalChild;
   index: number;
-  group: string;
+  group: GroupId;
   disabled: boolean;
+  itemCount: number;
+  canChangeCritical: boolean;
+  onKeyboardMove: (key: string, move: KeyboardMove) => void;
 }) {
+  const key = planRefKey(child.ref);
   const { ref, handleRef, isDragging } = useSortable({
-    id: planRefKey(child.ref),
+    id: key,
     index,
     group,
     type: "goal-child",
@@ -62,6 +71,53 @@ function ChildRow({
           </>
         )}
       </span>
+      {!disabled && (
+        <span className="goal-child-actions">
+          <button
+            type="button"
+            className="child-order-button"
+            aria-label={"Move " + child.name + " up"}
+            title={"Move " + child.name + " up"}
+            disabled={index === 0}
+            onClick={() => onKeyboardMove(key, "up")}
+          >
+            <ArrowUp size={16} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="child-order-button"
+            aria-label={"Move " + child.name + " down"}
+            title={"Move " + child.name + " down"}
+            disabled={index === itemCount - 1}
+            onClick={() => onKeyboardMove(key, "down")}
+          >
+            <ArrowDown size={16} aria-hidden="true" />
+          </button>
+          {canChangeCritical && (
+            <button
+              type="button"
+              className="child-order-button"
+              aria-label={
+                "Move " +
+                child.name +
+                (group === "critical"
+                  ? " to non-critical children"
+                  : " to critical children")
+              }
+              title={
+                "Move " +
+                child.name +
+                (group === "critical"
+                  ? " to non-critical children"
+                  : " to critical children")
+              }
+              onClick={() => onKeyboardMove(key, "toggle")}
+            >
+              <ArrowRightLeft size={16} aria-hidden="true" />
+            </button>
+          )}
+        </span>
+      )}
     </li>
   );
 }
@@ -71,11 +127,15 @@ function ChildGroup({
   items,
   children,
   disabled,
+  canChangeCritical,
+  onKeyboardMove,
 }: {
-  id: keyof Groups;
+  id: GroupId;
   items: string[];
   children: GoalChild[];
   disabled: boolean;
+  canChangeCritical: boolean;
+  onKeyboardMove: (key: string, move: KeyboardMove) => void;
 }) {
   const title =
     id === "critical" ? "Critical children" : "Non-critical children";
@@ -103,6 +163,9 @@ function ChildGroup({
               index={index}
               group={id}
               disabled={disabled}
+              itemCount={items.length}
+              canChangeCritical={canChangeCritical}
+              onKeyboardMove={onKeyboardMove}
             />
           ) : null;
         })}
@@ -143,6 +206,45 @@ export default function GoalChildren({
     setItems(next);
     current.current = next;
   }, [signature]);
+  const emitOrder = (next: Groups) => {
+    current.current = next;
+    setItems(next);
+    const toRef = (key: string) => generatedPlanRef(key, edits);
+    queueEdit({
+      type: "reorderChildren",
+      planRef: parentRef,
+      criticalRefs: next.critical.map(toRef),
+      nonCriticalRefs: next.noncritical.map(toRef),
+      previousChildRefs: [
+        ...plan.children.map((child) => generatedPlanRef(child.plan_id, edits)),
+        ...children.map((child) => child.ref),
+      ],
+    });
+  };
+  const keyboardMove = (key: string, moveKind: KeyboardMove) => {
+    const source: GroupId = current.current.critical.includes(key)
+      ? "critical"
+      : "noncritical";
+    const sourceItems = [...current.current[source]];
+    const index = sourceItems.indexOf(key);
+    if (index < 0) return;
+    if (moveKind === "toggle") {
+      const target: GroupId =
+        source === "critical" ? "noncritical" : "critical";
+      sourceItems.splice(index, 1);
+      emitOrder({
+        ...current.current,
+        [source]: sourceItems,
+        [target]: [...current.current[target], key],
+      });
+      return;
+    }
+    const nextIndex = moveKind === "up" ? index - 1 : index + 1;
+    if (nextIndex < 0 || nextIndex >= sourceItems.length) return;
+    sourceItems.splice(index, 1);
+    sourceItems.splice(nextIndex, 0, key);
+    emitOrder({ ...current.current, [source]: sourceItems });
+  };
   return (
     <section className="detail-panel" aria-label="Children">
       <h3>Children</h3>
@@ -166,19 +268,7 @@ export default function GoalChildren({
             JSON.stringify(current.current) === JSON.stringify(previous.current)
           )
             return;
-          const toRef = (key: string) => generatedPlanRef(key, edits);
-          queueEdit({
-            type: "reorderChildren",
-            planRef: parentRef,
-            criticalRefs: current.current.critical.map(toRef),
-            nonCriticalRefs: current.current.noncritical.map(toRef),
-            previousChildRefs: [
-              ...plan.children.map((child) =>
-                generatedPlanRef(child.plan_id, edits),
-              ),
-              ...children.map((child) => child.ref),
-            ],
-          });
+          emitOrder(current.current);
         }}
       >
         {!plan.is_master && (
@@ -187,6 +277,8 @@ export default function GoalChildren({
             items={items.critical}
             children={children}
             disabled={!editMode}
+            canChangeCritical
+            onKeyboardMove={keyboardMove}
           />
         )}
         <ChildGroup
@@ -194,6 +286,8 @@ export default function GoalChildren({
           items={items.noncritical}
           children={children}
           disabled={!editMode}
+          canChangeCritical={!plan.is_master}
+          onKeyboardMove={keyboardMove}
         />
       </DragDropProvider>
     </section>

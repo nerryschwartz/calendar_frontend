@@ -720,6 +720,19 @@ button,
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.goal-child-actions {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.child-order-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
 .drag-handle {
   display: inline-flex;
   align-items: center;

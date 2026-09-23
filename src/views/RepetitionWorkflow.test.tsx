@@ -174,7 +174,7 @@ it("captures selected template fields into a visible preview queue once across n
     </MemoryRouter>,
   );
   await screen.findByRole("heading", {
-    name: "First instance time constraints",
+    name: "Pending plan time constraints",
   });
   const editor = within(
     screen.getByRole("group", { name: "First instance template" }),
@@ -223,7 +223,7 @@ it("captures selected template fields into a visible preview queue once across n
   ).toHaveLength(0);
 });
 
-it("passes a complete new repetition to preview generation", () => {
+it("passes a minimal new repetition to preview generation", () => {
   const generate = vi.fn(async (_ref, _edits: DraftEdit[]) => "created");
   const queueEdit = vi.fn();
   render(
@@ -241,14 +241,12 @@ it("passes a complete new repetition to preview generation", () => {
     target: { value: "REPETITION" },
   });
   fireEvent.change(form.getByLabelText("Name"), { target: { value: "Lunch" } });
-  fireEvent.change(form.getByLabelText("First instance constraint start"), {
-    target: { value: "2026-09-12T11:00" },
-  });
-  fireEvent.change(form.getByLabelText("First instance constraint end"), {
-    target: { value: "2026-09-12T15:00" },
-  });
   fireEvent.click(form.getByText("Generate instances"));
   expect(queueEdit).not.toHaveBeenCalled();
-  expect(generate.mock.calls[0][1]).toHaveLength(2);
+  expect(generate.mock.calls[0][1]).toHaveLength(1);
+  expect(generate.mock.calls[0][1][0]).toMatchObject({
+    type: "createChild",
+    body: { kind: "REPETITION", name: "Lunch" },
+  });
   expect(form.getByLabelText("Name")).toHaveValue("");
 });

@@ -11,6 +11,7 @@ import { editReferences } from "../utils/repetitionDrafts";
 import { allPendingPlans } from "../utils/generatedPlans";
 import { generationIsFresh } from "../utils/generationInput";
 import { omittedInstanceIndices } from "../utils/savePlanDrafts";
+import { normalizeChildOrders } from "../utils/goalChildren";
 
 export interface GenerationBlocker {
   ref: PlanRef;
@@ -62,9 +63,10 @@ export async function repetitionReadiness(edits: DraftEdit[]) {
       }
     }
   }
-  const effectiveEdits = edits
+  const effectiveEdits = normalizeChildOrders(edits)
     .filter((edit) => {
       if (edit.type === "createChild") return !canceled.has(edit.draftId);
+      if (edit.type === "reorderChildren") return !removed(edit.planRef);
       if (edit.type === "delete" && edit.planRef.kind === "persisted")
         return true;
       if (

@@ -1,4 +1,5 @@
 import type { ApiErrorMessage, RefreshScheduleResult } from "../api/types";
+import SchedulingDiagnostics, { SolverOutcome } from "./SchedulingDiagnostics";
 
 interface RefreshResultPanelProps {
   result: RefreshScheduleResult | null;
@@ -45,6 +46,7 @@ export default function RefreshResultPanel({
       {assignment && (
         <div className="refresh-section">
           <strong>Task assignment</strong>
+          <SolverOutcome status={assignment.optimization_status} />
           <p>
             Status: <code>{assignment.optimization_status}</code> · Runtime:{" "}
             {assignment.runtime_ms} ms
@@ -56,9 +58,13 @@ export default function RefreshResultPanel({
             )}
           </p>
           {assignment.conflicts.length > 0 && (
-            <p className="warning-text">
-              {assignment.conflicts.length} conflict(s) in result
-            </p>
+            <ul>
+              {assignment.conflicts.map((conflict, index) => (
+                <li key={index}>
+                  <SchedulingDiagnostics conflict={conflict} />
+                </li>
+              ))}
+            </ul>
           )}
           <WarningList
             warnings={assignment.warnings}
@@ -70,6 +76,7 @@ export default function RefreshResultPanel({
       {blockAssignment && (
         <div className="refresh-section">
           <strong>Block assignment</strong>
+          <SolverOutcome status={blockAssignment.optimization_status} />
           <p>
             Status: <code>{blockAssignment.optimization_status}</code> ·
             Runtime: {blockAssignment.runtime_ms} ms

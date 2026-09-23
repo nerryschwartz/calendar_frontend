@@ -188,3 +188,68 @@ it("readiness accepts fresh previews and records deleted instance roots as omiss
   ]);
   expect(stale.blockers).toHaveLength(1);
 });
+
+it("resolves nested template children and retries parent ordering without replaying creation", async () => {
+  let failOrder = true;
+  const fetchMock = vi.fn(
+    async (url: RequestInfo | URL, _init?: RequestInit) => {
+      const path = String(url);
+      if (path.endsWith("/master/children"))
+        return new Response(JSON.stringify({ plan_id: "outer" }));
+      if (path.endsWith("/outer"))
+        return new Response(
+          JSON.stringify({ repetition_detail: { template_root_id: "inner" } }),
+        );
+      if (path.endsWith("/inner"))
+        return new Response(
+          JSON.stringify({ repetition_detail: { template_root_id: "goal" } }),
+        );
+      if (path.endsWith("/goal/children"))
+        return new Response(JSON.stringify({ plan_id: "child" }));
+      if (path.endsWith("/children/order") && failOrder) {
+        failOrder = false;
+        throw new Error("Ordering offline");
+      }
+      return new Response(JSON.stringify({}));
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const goal = templatePlanRef(templatePlanRef(draftPlanRef("repeat")));
+  const order: DraftEdit = {
+    type: "reorderChildren",
+    planRef: goal,
+    criticalRefs: [draftPlanRef("child")],
+    nonCriticalRefs: [],
+    previousChildRefs: [],
+  };
+  let remaining: DraftEdit[] = [];
+  try {
+    await applyDraftEdits([
+      order,
+      { ...repetitionCreate, parentRef: persistedPlanRef("master") },
+      {
+        type: "createChild",
+        draftId: "child",
+        parentRef: goal,
+        body: { kind: "TASK", name: "Child", is_critical: false },
+      },
+    ]);
+  } catch (error) {
+    remaining = (error as DraftEditApplyError).remainingEdits!;
+  }
+  expect(remaining).toMatchObject([
+    {
+      type: "reorderChildren",
+      planRef: persistedPlanRef("goal"),
+      criticalRefs: [persistedPlanRef("child")],
+    },
+  ]);
+  await applyDraftEdits(remaining);
+  expect(
+    fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/children")),
+  ).toHaveLength(2);
+  expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body))).toEqual({
+    critical_child_ids: ["child"],
+    non_critical_child_ids: [],
+  });
+});

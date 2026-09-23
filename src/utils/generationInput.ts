@@ -14,8 +14,13 @@ import {
   type DraftEdit,
   type CreateChildBody,
 } from "../api/types";
-import { allPendingPlans, type GenerationEdit } from "./generatedPlans";
+import {
+  allPendingPlans,
+  templateBody,
+  type GenerationEdit,
+} from "./generatedPlans";
 import { projectConstraintGroups } from "./constraintDrafts";
+import { normalizeChildOrders } from "./goalChildren";
 
 function settings(
   body: CreateChildBody | Partial<ProjectionSettings>,
@@ -61,18 +66,24 @@ function firstTemplate(
   owner: string,
   body: CreateChildBody,
 ): ProjectionNode {
-  const node = newNode(ref, owner, {
-    kind: body.template_type ?? "TASK",
-    name: body.template_name ?? body.name + " template",
-    is_critical: false,
-    duration_minutes: body.template_duration_minutes ?? 30,
-    divisible: body.template_divisible ?? false,
-    minimum_chunk_size_minutes:
-      body.template_minimum_chunk_size_minutes ?? null,
-    block_family: body.template_block_family,
-  });
+  const node = newNode(ref, owner, templateBody(body));
   node.is_critical = null;
   return node;
+}
+
+function appendTemplates(
+  nodes: ProjectionNode[],
+  sourceRefs: Record<string, PlanRef>,
+  owner: PlanRef,
+  body: CreateChildBody,
+  ownerKey = planRefKey(owner),
+) {
+  if (body.kind !== "REPETITION") return;
+  const ref = templatePlanRef(owner);
+  const key = planRefKey(ref);
+  nodes.push(firstTemplate(key, ownerKey, body));
+  sourceRefs[key] = ref;
+  appendTemplates(nodes, sourceRefs, ref, templateBody(body), key);
 }
 function fromDetail(detail: PlanDetailDTO): ProjectionNode {
   const node = newNode(
@@ -176,8 +187,7 @@ export async function generationBaseline(
       for (const node of nodes) sourceRefs[node.ref] = draftPlanRef(node.ref);
     } else {
       root = planRefKey(templatePlanRef(ref));
-      nodes.push(firstTemplate(root, repetitionRef, pending.body));
-      sourceRefs[root] = templatePlanRef(ref);
+      appendTemplates(nodes, sourceRefs, ref, pending.body);
     }
   }
   return {
@@ -195,6 +205,7 @@ export function generationInput(
   sourceRefs: Record<string, PlanRef>,
   edits: DraftEdit[],
 ): PreviewInput {
+  edits = normalizeChildOrders(edits);
   const result = structuredClone(baseline);
   const nodes = result.template.nodes;
   const keyFor = (ref: PlanRef): string => {
@@ -230,9 +241,7 @@ export function generationInput(
     nodes.push(child);
     sourceRefs[ref] = draftPlanRef(edit.draftId);
     if (edit.body.kind === "REPETITION") {
-      const root = "template:" + ref;
-      nodes.push(firstTemplate(root, ref, edit.body));
-      sourceRefs[root] = templatePlanRef(draftPlanRef(edit.draftId));
+      appendTemplates(nodes, sourceRefs, draftPlanRef(edit.draftId), edit.body);
     }
   }
   for (const edit of edits) {
@@ -254,6 +263,21 @@ export function generationInput(
     if (edit.type === "move") {
       node.sort_order = edit.position;
       if (edit.isCritical !== undefined) node.is_critical = edit.isCritical;
+    }
+    if (edit.type === "reorderChildren") {
+      for (const [critical, refs] of [
+        [true, edit.criticalRefs],
+        [false, edit.nonCriticalRefs],
+      ] as const)
+        refs.forEach((ref, index) => {
+          const child = nodes.find(
+            (entry) => entry.ref === keyFor(ref) && entry.parent_ref === key,
+          );
+          if (child) {
+            child.is_critical = critical;
+            child.sort_order = index;
+          }
+        });
     }
     if (edit.type === "addPrerequisite") {
       const prerequisite = keyFor(edit.prerequisitePlanRef);

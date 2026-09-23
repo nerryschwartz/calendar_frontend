@@ -90,7 +90,12 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
   const queueEdit = useCallback((edit: DraftEdit) => {
     if (actionLock.current) return;
     setDraftEdits((prev) => [
-      ...prev,
+      ...prev.filter(
+        (current) =>
+          edit.type !== "reorderChildren" ||
+          current.type !== "reorderChildren" ||
+          planRefKey(current.planRef) !== planRefKey(edit.planRef),
+      ),
       edit.type === "addConstraintGroup"
         ? {
             ...edit,
@@ -144,6 +149,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
     setSuccessMessage(null);
     setRefreshResult(null);
     const toSave = draftEdits;
+    let savedCount: number | null = null;
     try {
       const readiness = await repetitionReadiness(toSave);
       setGenerationBlockers(readiness.blockers);
@@ -155,6 +161,7 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
         );
       }
       const editCount = await applyDraftEdits(readiness.effectiveEdits);
+      savedCount = editCount;
       clearDrafts();
       setEditMode(false);
       setConfirmExit(false);
@@ -168,8 +175,15 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
       void refreshSchedule()
         .then((result) => {
           setRefreshResult(result);
+          const status =
+            result.assignment?.optimization_status ??
+            result.block_assignment?.optimization_status;
           setSuccessMessage(
-            `Saved ${editCount} edit(s), validated, and refreshed schedule`,
+            status === "UNKNOWN"
+              ? `Saved ${editCount} edit(s), but scheduling stopped without proving feasibility or infeasibility`
+              : status === "INFEASIBLE"
+                ? `Saved ${editCount} edit(s), but scheduling found no feasible calendar`
+                : `Saved ${editCount} edit(s), validated, and refreshed schedule`,
           );
         })
         .catch((err: unknown) => {
@@ -197,6 +211,10 @@ export function usePlanEditMode({ onSaved }: UsePlanEditModeOptions = {}) {
           setRefreshingSchedule(false);
         });
     } catch (err) {
+      if (savedCount !== null)
+        setSuccessMessage(
+          `Saved ${savedCount} edit(s), but validation failed; the saved edits will not be replayed`,
+        );
       const failedEditError =
         isDraftEditApplyError(err) && err.cause ? err.cause : err;
 

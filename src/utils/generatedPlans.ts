@@ -12,6 +12,7 @@ import {
 
 export type GenerationEdit = Extract<DraftEdit, { type: "generateInstances" }>;
 export type PendingPlan = Extract<DraftEdit, { type: "createChild" }> & {
+  ref?: PlanRef;
   detail?: PlanDetailDTO;
   generation?: {
     batch: GenerationEdit;
@@ -21,6 +22,42 @@ export type PendingPlan = Extract<DraftEdit, { type: "createChild" }> & {
     blueprint: boolean;
   };
 };
+
+export const pendingPlanRef = (item: PendingPlan): PlanRef =>
+  item.ref ?? draftPlanRef(item.draftId);
+
+export function templateBody(body: CreateChildBody): CreateChildBody {
+  return body.template
+    ? { ...body.template, is_critical: false }
+    : {
+        kind: body.template_type ?? "TASK",
+        name: body.template_name ?? body.name + " template",
+        is_critical: false,
+        duration_minutes: body.template_duration_minutes ?? 30,
+        divisible: body.template_divisible ?? false,
+        minimum_chunk_size_minutes:
+          body.template_minimum_chunk_size_minutes ?? null,
+        block_family: body.template_block_family,
+      };
+}
+
+function withTemplates(items: PendingPlan[]): PendingPlan[] {
+  const result: PendingPlan[] = [];
+  const visit = (item: PendingPlan) => {
+    result.push(item);
+    if (item.generation || item.body.kind !== "REPETITION") return;
+    const ref = templatePlanRef(pendingPlanRef(item));
+    visit({
+      type: "createChild",
+      draftId: planRefKey(ref),
+      ref,
+      parentRef: pendingPlanRef(item),
+      body: templateBody(item.body),
+    });
+  };
+  items.forEach(visit);
+  return result;
+}
 
 export function nodeBody(node: ProjectionNode): CreateChildBody {
   return {
@@ -147,7 +184,7 @@ export function allPendingPlans(edits: DraftEdit[]): PendingPlan[] {
 }
 
 export function pendingPlans(edits: DraftEdit[]): PendingPlan[] {
-  const all = allPendingPlans(edits);
+  const all = withTemplates(allPendingPlans(edits));
   const removed = new Set(
     edits
       .filter((edit) => edit.type === "delete")
@@ -164,13 +201,13 @@ export function pendingPlans(edits: DraftEdit[]): PendingPlan[] {
     for (const item of all)
       if (
         removed.has(planRefKey(item.parentRef)) &&
-        !removed.has("draft:" + item.draftId)
+        !removed.has(planRefKey(pendingPlanRef(item)))
       ) {
-        removed.add("draft:" + item.draftId);
+        removed.add(planRefKey(pendingPlanRef(item)));
         changed = true;
       }
   }
-  return all.filter((item) => !removed.has("draft:" + item.draftId));
+  return all.filter((item) => !removed.has(planRefKey(pendingPlanRef(item))));
 }
 
 export function generatedPlanRef(key: string, edits: DraftEdit[]): PlanRef {

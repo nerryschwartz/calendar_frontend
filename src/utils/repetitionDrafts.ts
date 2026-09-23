@@ -8,6 +8,8 @@ import {
 
 export function editReferences(edit: DraftEdit): PlanRef[] {
   if (edit.type === "createChild") return [edit.parentRef];
+  if (edit.type === "reorderChildren")
+    return [edit.planRef, ...edit.criticalRefs, ...edit.nonCriticalRefs];
   return edit.type === "addPrerequisite" || edit.type === "removePrerequisite"
     ? [edit.planRef, edit.prerequisitePlanRef]
     : [edit.planRef];

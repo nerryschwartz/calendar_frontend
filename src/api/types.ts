@@ -6,7 +6,7 @@ export type RepeatMode = "MANUAL_COUNT" | "DATE_RANGE";
 export type CalendarEntryType = "TASK" | "FREE_TIME";
 export type TimerSourceKind = "TASK" | "BLOCK" | "FREE_TIME";
 export type NotificationSourceKind = "TASK" | "BLOCK";
-export type SolverStatus = "OPTIMAL" | "FEASIBLE" | "INFEASIBLE";
+export type SolverStatus = "OPTIMAL" | "FEASIBLE" | "INFEASIBLE" | "UNKNOWN";
 export type FreeTimeWeekStartDay =
   | "MONDAY"
   | "TUESDAY"
@@ -38,6 +38,33 @@ export interface AssignmentConflict {
   explanation: string;
   is_global: boolean;
   is_approximate: boolean;
+  diagnostics?: AssignmentDiagnostics | null;
+}
+
+export interface AssignmentDiagnostics {
+  tasks: {
+    plan_id: string;
+    name: string;
+    duration_minutes: number;
+    divisible: boolean;
+    minimum_chunk_size_minutes: number | null;
+    allowed_block_families: string[];
+  }[];
+  constraint_sources: {
+    plan_id: string;
+    name: string;
+    constraint_kind: ConstraintKind;
+    constraint_group_id: string;
+    windows: UserWindowBody[];
+  }[];
+  effective_windows: { plan_id: string; windows: UserWindowBody[] }[];
+  blocking_plans: { plan_id: string; name: string }[];
+  solver: {
+    stage: string;
+    estimate: number | null;
+    limit: number | null;
+    proof_status: "proven_infeasible" | "not_proven";
+  };
 }
 
 export interface AssignmentResult {
@@ -375,6 +402,7 @@ export interface CreateChildBody {
   manual_count?: number | null;
   end_time?: string | null;
   default_instance_critical?: boolean | null;
+  template?: TemplateCreateBody;
   template_type?: PlanKind | null;
   template_name?: string | null;
   template_duration_minutes?: number | null;
@@ -382,6 +410,17 @@ export interface CreateChildBody {
   template_minimum_chunk_size_minutes?: number | null;
   template_block_family?: string | null;
 }
+
+export type TemplateCreateBody = Omit<
+  CreateChildBody,
+  | "is_critical"
+  | "template_type"
+  | "template_name"
+  | "template_duration_minutes"
+  | "template_divisible"
+  | "template_minimum_chunk_size_minutes"
+  | "template_block_family"
+>;
 
 export interface TaskSchedulingBody {
   duration_minutes?: number | null;
@@ -478,6 +517,13 @@ export type DraftEdit =
     }
   | { type: "move"; planRef: PlanRef; position: number; isCritical?: boolean }
   | {
+      type: "reorderChildren";
+      planRef: PlanRef;
+      criticalRefs: PlanRef[];
+      nonCriticalRefs: PlanRef[];
+      previousChildRefs: PlanRef[];
+    }
+  | {
       type: "addPrerequisite";
       planRef: PlanRef;
       prerequisitePlanRef: PlanRef;
@@ -554,6 +600,9 @@ export function getAssignmentConflicts(
   if (Array.isArray(assignment.conflicts)) {
     return assignment.conflicts;
   }
+  const refresh = value as RefreshScheduleResult;
+  if (Array.isArray(refresh.assignment?.conflicts))
+    return refresh.assignment.conflicts;
   return [];
 }
 
@@ -567,6 +616,8 @@ export function summarizeDraftEdit(edit: DraftEdit): string {
       return `Create ${edit.body.kind} child "${edit.body.name}"`;
     case "move":
       return `Move to position ${edit.position}${edit.isCritical != null ? ` (critical=${edit.isCritical})` : ""}`;
+    case "reorderChildren":
+      return "Reorder goal children";
     case "addPrerequisite":
       return `Add prerequisite ${summarizePlanRef(edit.prerequisitePlanRef)}`;
     case "removePrerequisite":

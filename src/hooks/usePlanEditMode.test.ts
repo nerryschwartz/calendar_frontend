@@ -59,6 +59,38 @@ function deferred<T>() {
 }
 
 describe("usePlanEditMode", () => {
+  it("reports an unknown solve without replaying saved edits", async () => {
+    refreshScheduleMock.mockResolvedValue({
+      ...refreshResult,
+      assignment: {
+        run_started_at: refreshResult.run_started_at,
+        optimization_status: "UNKNOWN",
+        calendar_entries: [],
+        conflicts: [],
+        warnings: [],
+        runtime_ms: 10,
+        calendar_run_id: null,
+      },
+    });
+    const { result } = renderHook(() => usePlanEditMode());
+    act(() => {
+      result.current.enterEditMode();
+      result.current.queueEdit({
+        type: "rename",
+        planRef: persistedPlanRef("task"),
+        name: "Task",
+      });
+    });
+    await act(() => result.current.saveEdits());
+    await waitFor(() => expect(result.current.refreshingSchedule).toBe(false));
+    expect(result.current.successMessage).toContain(
+      "without proving feasibility or infeasibility",
+    );
+    expect(result.current.draftEdits).toEqual([]);
+    expect(result.current.editMode).toBe(false);
+    await act(() => result.current.saveEdits());
+    expect(applyDraftEditsMock).toHaveBeenCalledTimes(1);
+  });
   it("rechecks tree-wide blockers before Save and leaves edits unapplied", async () => {
     vi.mocked(repetitionReadiness).mockImplementation(async (edits) => ({
       blockers: [{ ref: persistedPlanRef("repeat"), name: "Lunch" }],
@@ -344,6 +376,9 @@ describe("usePlanEditMode", () => {
     expect(result.current.editMode).toBe(false);
     expect(result.current.draftEdits).toEqual([]);
     expect(result.current.error).toBe(validationError.detail);
+    expect(result.current.successMessage).toContain(
+      "Saved 1 edit(s), but validation failed",
+    );
   });
 
   it("removes only applied draft edits when a later edit fails", async () => {
